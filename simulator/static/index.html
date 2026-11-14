@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Platoon Simulator</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Crect x=%271%27 y=%275%27 width=%2714%27 height=%276%27 rx=%272%27 fill=%27%2335b26f%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Distributed Platoon Simulator</h1>
+    <p class="sub">Each car is an independent agent. It measures its own speed and its radar gap, and gets everything else from its neighbours over vehicle-to-vehicle (V2V) links.</p>
+  </div>
+  <div class="clock"><span id="clock">t = <b>0.0 s</b></span><span id="leader">leader <b>15.0 m/s</b></span></div>
+</header>
+
+<section class="controls">
+  <button id="play" class="primary" title="Space">&#9654; Play</button>
+  <button id="reset" title="R">&#10226; Reset</button>
+  <label>Scenario
+    <select id="scenario">
+      <option value="catchup">Catch-up (trained on)</option>
+      <option value="slowdown">Slow-down (never seen)</option>
+    </select>
+  </label>
+  <label>Seed <select id="seed"></select></label>
+  <label>Speed
+    <select id="speed">
+      <option value="0.5">0.5&times;</option>
+      <option value="1" selected>1&times;</option>
+      <option value="2">2&times;</option>
+      <option value="4">4&times;</option>
+    </select>
+  </label>
+  <button id="brake" class="danger" title="B">Leader brakes!</button>
+  <button id="auto" title="Catch-up, then the leader brakes at 30 s">Auto demo</button>
+  <span class="net"><span class="pill" id="netpill">Network: perfect delivery</span></span>
+</section>
+
+<div id="banner" class="banner" hidden>Lost connection to the simulator. Is <code>python -m simulator.server</code> still running?</div>
+
+<main id="lanes"></main>
+
+<footer class="legend">
+  <span><i class="sw" style="background:var(--good)"></i>gap within 2 m of the 20 m target</span>
+  <span><i class="sw" style="background:var(--warn)"></i>2 to 6 m off</span>
+  <span><i class="sw" style="background:var(--bad)"></i>more than 6 m off, or closer than 10 m</span>
+  <span><i class="sw" style="background:var(--leader)"></i>leader</span>
+  <span><i class="sw" style="background:#ff2d2d;width:4px"></i>brake lights: decelerating harder than 0.8 m/s&sup2;</span>
+  <span><i class="dot" style="width:7px;height:7px;background:var(--msg-beacon)"></i>beacon: front car's speed (4 bytes)</span>
+  <span><i class="dot" style="width:10px;height:10px;background:var(--msg-data)"></i>shared observation (IA2C, 20 bytes) or NeurComm message (292 bytes, drawn bigger)</span>
+  <span><i class="sw" style="background:#6b7078"></i>crashed car process</span>
+  <span><i class="sw" style="background:transparent;border:1.5px dashed var(--muted)"></i>car using an old or estimated value</span>
+  <span style="color:#d64541;font-weight:600">&#10005;</span><span style="margin-left:-12px">message lost</span>
+  <span class="keys">Keys: <kbd>Space</kbd> play/pause &middot; <kbd>B</kbd> brake &middot; <kbd>R</kbd> reset</span>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

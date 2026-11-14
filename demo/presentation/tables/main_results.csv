@@ -1,0 +1,6 @@
+Method,Reward (mean ± std),95% CI,Collisions,Gap err [m],Speed err [m/s],Beats fixed on,Evaluated checkpoint
+"Fixed controller (0.5, 0.5), no learning",-72.7 ± 46.5,± 12.9,0 / 50,0.88,0.75,—,—
+**IA2C**,-37.2 ± 23.9,± 6.6,0 / 50,0.53,0.33,50 / 50 seeds,best @ 27.1k of 60k steps
+NeurComm,-422.3 ± 270.4,± 74.9,0 / 50,2.53,0.11,0 / 50 seeds,best @ 8.8k of 60k steps
+NeurComm 1e6 (PyTorch RMSprop),-392.4 ± 245.0,± 67.9,0 / 50,2.36,0.00,0 / 50 seeds,best @ 469.6k of 1000k steps
+NeurComm 1e6 (TF-style RMSprop),-392.4 ± 245.0,± 67.9,0 / 50,2.36,0.00,0 / 50 seeds,best @ 396.1k of 1000k steps

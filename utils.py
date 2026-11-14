@@ -4,7 +4,7 @@ import numpy as np
 import time
 import os
 import pandas as pd
-import subprocess
+import shutil
 
 
 def check_dir(cur_dir):
@@ -14,8 +14,7 @@ def check_dir(cur_dir):
 
 
 def copy_file(src_dir, tar_dir):
-    cmd = 'sudo cp %s %s' % (src_dir, tar_dir)
-    subprocess.check_call(cmd, shell=True)
+    shutil.copy(src_dir, tar_dir)
 
 
 def find_file(cur_dir, suffix='.ini'):
@@ -90,7 +89,14 @@ class Counter:
 
 
 class Trainer():
-    def __init__(self, env, model, global_counter, summary_writer, output_path=None):
+    def __init__(self, env, model, global_counter, summary_writer, output_path=None,
+                 model_dir=None, best_window=5):
+        # if model_dir is given, keep the checkpoint with the best rolling-mean test reward
+        # in model_dir/best/ (CACC only: ATSC has no per-episode test run)
+        self.best_dir = None if model_dir is None else os.path.join(model_dir, 'best/')
+        self.best_window = best_window
+        self.best_reward = -np.inf
+        self.test_rewards = []
         self.cur_step = 0
         self.global_counter = global_counter
         self.env = env
@@ -142,6 +148,22 @@ class Trainer():
         self.data.append(log)
         self._add_summary(mean_reward, global_step)
         self.summary_writer.flush()
+
+    def _save_if_best(self, test_reward, global_step):
+        if self.best_dir is None:
+            return
+        self.test_rewards.append(test_reward)
+        if len(self.test_rewards) < self.best_window:
+            return
+        cur = np.mean(self.test_rewards[-self.best_window:])
+        if cur > self.best_reward:
+            self.best_reward = cur
+            os.makedirs(self.best_dir, exist_ok=True)
+            for f in os.listdir(self.best_dir):
+                if f.startswith('checkpoint'):
+                    os.remove(os.path.join(self.best_dir, f))
+            self.model.save(self.best_dir, global_step)
+            logging.info('New best rolling test reward %.2f at step %d' % (cur, global_step))
 
     def explore(self, prev_ob, prev_done):
         ob = prev_ob
@@ -234,6 +256,7 @@ class Trainer():
                 self.env.train_mode = False
                 mean_reward, std_reward = self.perform(-1)
                 self.env.train_mode = True
+                self._save_if_best(mean_reward, global_step)
             self._log_episode(global_step, mean_reward, std_reward)
 
         df = pd.DataFrame(self.data)

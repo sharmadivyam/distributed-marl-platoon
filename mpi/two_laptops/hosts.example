@@ -1,0 +1,5 @@
+# Copy to mpi/two_laptops/hosts and put in the real names (System Settings > General > Sharing,
+# "Local hostname"). The first line is laptop A, where you type mpirun: it gets the road (rank 0)
+# and cars 1-4. Laptop B gets cars 5-8. "laptopB" can also be an alias from ~/.ssh/config.
+Divyams-MacBook-Air-2.local slots=5
+LAPTOP-B-NAME.local slots=4

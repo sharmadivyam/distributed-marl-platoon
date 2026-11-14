@@ -7,7 +7,7 @@ import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from agents.utils import OnPolicyBuffer, MultiAgentOnPolicyBuffer, Scheduler
+from agents.utils import OnPolicyBuffer, MultiAgentOnPolicyBuffer, Scheduler, TFRMSprop
 from agents.policies import (LstmPolicy, FPPolicy, ConsensusPolicy, NCMultiAgentPolicy,
                              CommNetMultiAgentPolicy, DIALMultiAgentPolicy)
 import logging
@@ -181,8 +181,13 @@ class IA2C:
         # init optimizer
         alpha = model_config.getfloat('rmsp_alpha')
         epsilon = model_config.getfloat('rmsp_epsilon')
-        self.optimizer = optim.RMSprop(self.policy.parameters(), self.lr_init, 
+        # 'rmsprop_tf' matches the TF1 optimizer of the original paper code
+        if model_config.get('optimizer', fallback='rmsprop') == 'rmsprop_tf':
+            self.optimizer = TFRMSprop(self.policy.parameters(), self.lr_init,
                                        eps=epsilon, alpha=alpha)
+        else:
+            self.optimizer = optim.RMSprop(self.policy.parameters(), self.lr_init,
+                                           eps=epsilon, alpha=alpha)
         # init transition buffer
         gamma = model_config.getfloat('gamma')
         self._init_trans_buffer(gamma, distance_mask, coop_gamma)

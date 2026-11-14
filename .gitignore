@@ -1,0 +1,19 @@
+# environment and caches
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# bulky experiment outputs (regenerate with the scripts in demo/ and mpi/)
+demo/repro/
+demo/runs_*/
+demo/videos/
+demo/results_*/
+mpi/logs/
+mpi/results/logs/
+
+# from demo/runs keep only what the simulator and MPI demo need: configs + best checkpoints
+demo/runs/**
+!demo/runs/**/
+!demo/runs/*/data/*.ini
+!demo/runs/*/model/best/*.pt

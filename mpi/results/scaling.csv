@@ -1,0 +1,4 @@
+controller,cars,processes,seed,scenario,drop,delay_steps,fallback,kill_car,steps,avg_reward,collision_t,msgs_sent,bytes_sent,msgs_dropped,stale_reads,wall_s,ms_per_step,log,ms_per_step_all,msgs_per_step
+fixed,8,9,100000,catchup,0.0,0,last,,300,-89.02480983921332,,2400,9600,0,0,0.24,0.79,mpi/results/logs/fixed_n8_steps300.jsonl,0.79 0.83 1.57,8.0
+fixed,16,17,100000,catchup,0.0,0,last,,300,-564.6995752286779,,4800,19200,0,0,0.4,1.33,mpi/results/logs/fixed_n16_steps300.jsonl,1.66 1.60 1.33,16.0
+fixed,32,33,100000,catchup,0.0,0,last,,300,-1037.8150994438088,,9600,38400,0,0,0.64,2.13,mpi/results/logs/fixed_n32_steps300.jsonl,2.65 2.32 2.13,32.0

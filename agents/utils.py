@@ -113,7 +113,7 @@ class OnPolicyBuffer(TransBuffer):
         Rs = np.array(self.Rs, dtype=np.float32)
         Advs = np.array(self.Advs, dtype=np.float32)
         # use pre-step dones here
-        dones = np.array(self.dones[:-1], dtype=np.bool)
+        dones = np.array(self.dones[:-1], dtype=bool)
         self.reset(self.dones[-1])
         return obs, nas, acts, dones, Rs, Advs
 
@@ -187,7 +187,7 @@ class MultiAgentOnPolicyBuffer(OnPolicyBuffer):
         acts = np.transpose(np.array(self.acts, dtype=np.int32))
         Rs = np.array(self.Rs, dtype=np.float32)
         Advs = np.array(self.Advs, dtype=np.float32)
-        dones = np.array(self.dones[:-1], dtype=np.bool)
+        dones = np.array(self.dones[:-1], dtype=bool)
         self.reset(self.dones[-1])
         return obs, policies, acts, dones, Rs, Advs
 
@@ -267,6 +267,31 @@ class MultiAgentOnPolicyBuffer(OnPolicyBuffer):
             Advs.append(cur_Advs)
         self.Rs = np.array(Rs)
         self.Advs = np.array(Advs)
+
+"""
+optimizers
+"""
+class TFRMSprop(torch.optim.Optimizer):
+    """RMSprop with TF1 tf.train.RMSPropOptimizer semantics, as used by the paper's TF code:
+    the mean square is initialised to 1 and eps sits inside the sqrt. torch.optim.RMSprop
+    starts from 0 and adds eps outside the sqrt, so its early / small-gradient steps are
+    much larger for the same (lr, alpha, eps)."""
+    def __init__(self, params, lr, alpha=0.99, eps=1e-5):
+        super().__init__(params, dict(lr=lr, alpha=alpha, eps=eps))
+
+    @torch.no_grad()
+    def step(self):
+        for group in self.param_groups:
+            for p in group['params']:
+                if p.grad is None:
+                    continue
+                state = self.state[p]
+                if 'square_avg' not in state:
+                    state['square_avg'] = torch.ones_like(p)
+                square_avg = state['square_avg']
+                square_avg.mul_(group['alpha']).addcmul_(p.grad, p.grad, value=1 - group['alpha'])
+                p.addcdiv_(p.grad, square_avg.add(group['eps']).sqrt_(), value=-group['lr'])
+
 
 """
 util functions

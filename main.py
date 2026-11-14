@@ -9,8 +9,6 @@ import logging
 import threading
 from torch.utils.tensorboard.writer import SummaryWriter
 from envs.cacc_env import CACCEnv
-from envs.large_grid_env import LargeGridEnv
-from envs.real_net_env import RealNetEnv
 from agents.models import IA2C, IA2C_FP, MA2C_NC, IA2C_CU, MA2C_CNET, MA2C_DIAL
 from utils import (Counter, Trainer, Tester, Evaluator,
                    check_dir, copy_file, find_file,
@@ -32,6 +30,8 @@ def parse_args():
                     default=','.join([str(i) for i in range(2000, 2500, 10)]),
                     help="random seeds for evaluation, split by ,")
     sp.add_argument('--demo', action='store_true', help="shows SUMO gui")
+    sp.add_argument('--checkpoint', choices=['last', 'best'], default='last',
+                    help="last: final checkpoint; best: best rolling test reward during training (CACC)")
     args = parser.parse_args()
     if not args.option:
         parser.print_help()
@@ -42,9 +42,12 @@ def parse_args():
 def init_env(config, port=0):
     scenario = config.get('scenario')
     if scenario.startswith('atsc'):
+        # ATSC envs need SUMO (traci/sumolib); import lazily so CACC runs without it
         if scenario.endswith('large_grid'):
+            from envs.large_grid_env import LargeGridEnv
             return LargeGridEnv(config, port=port)
         else:
+            from envs.real_net_env import RealNetEnv
             return RealNetEnv(config, port=port)
     else:
         return CACCEnv(config)
@@ -100,7 +103,8 @@ def train(args):
 
     # disable multi-threading for safe SUMO implementation
     summary_writer = SummaryWriter(dirs['log'], flush_secs=10000)
-    trainer = Trainer(env, model, global_counter, summary_writer, output_path=dirs['data'])
+    trainer = Trainer(env, model, global_counter, summary_writer, output_path=dirs['data'],
+                      model_dir=dirs['model'])
     trainer.run()
 
     # save model
@@ -109,7 +113,7 @@ def train(args):
     summary_writer.close()
 
 
-def evaluate_fn(agent_dir, output_dir, seeds, port, demo):
+def evaluate_fn(agent_dir, output_dir, seeds, port, demo, checkpoint='last'):
     agent = agent_dir.split('/')[-1]
     if not check_dir(agent_dir):
         logging.error('Evaluation: %s does not exist!' % agent)
@@ -129,7 +133,7 @@ def evaluate_fn(agent_dir, output_dir, seeds, port, demo):
     model = init_agent(env, config['MODEL_CONFIG'], 0, 0)
     if model is None:
         return
-    model_dir = agent_dir + '/model/'
+    model_dir = agent_dir + ('/model/best/' if checkpoint == 'best' else '/model/')
     if not model.load(model_dir):
         return
     # collect evaluation data
@@ -152,7 +156,7 @@ def evaluate(args):
         seeds = []
     else:
         seeds = [int(s) for s in seeds.split(',')]
-    evaluate_fn(base_dir, output_dir, seeds, 1, args.demo)
+    evaluate_fn(base_dir, output_dir, seeds, 1, args.demo, args.checkpoint)
 
 
 if __name__ == '__main__':

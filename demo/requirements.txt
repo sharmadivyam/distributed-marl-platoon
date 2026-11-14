@@ -1,0 +1,8 @@
+# Versions the demo was tested with (Python 3.9, macOS, CPU only).
+# The top-level requirements.txt is the original 2020 pin list and will not install on a modern Mac.
+torch==2.8.0
+numpy==2.0.2
+pandas==2.3.3
+matplotlib==3.9.4
+seaborn==0.13.2
+tensorboard==2.21.0

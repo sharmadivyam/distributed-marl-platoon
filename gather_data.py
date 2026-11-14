@@ -1,5 +1,5 @@
 import os
-import subprocess
+import shutil
 import glob
 
 exp_name = 'slowdown'
@@ -13,5 +13,4 @@ files = glob.glob(os.path.join(base_dir, exp_name + '_*' +
 for f in files:
     fname = '_'.join(f.split('/')[n_base].split('_')[1:])
     fname = fname + '.csv'
-    cmd = 'sudo cp {} {}/{}'.format(f, out_dir, fname)
-    subprocess.check_call(cmd, shell=True)
+    shutil.copy(f, os.path.join(out_dir, fname))
