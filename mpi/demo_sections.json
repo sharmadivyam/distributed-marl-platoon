@@ -72,5 +72,14 @@
    "mpi/logs/sections/liar_defense_ia2c.jsonl",
    "mpi/logs/sections/liar_defense_neurcomm.jsonl"
   ]
+ },
+ {
+  "title": "Car 4 is malicious, radar check + gossip",
+  "about": "Car 3 cannot check car 4 (its radar looks forward). So after 3 lies in a row, car 5 warns car 3 directly over a 2-hop link, around the liar; from then on cars 3 and 5 ignore car 4. Car 3 only believes car 5, the one car whose radar can check car 4 (witness rule).",
+  "logs": [
+   "mpi/logs/sections/liar_gossip_fixed.jsonl",
+   "mpi/logs/sections/liar_gossip_ia2c.jsonl",
+   "mpi/logs/sections/liar_gossip_neurcomm.jsonl"
+  ]
  }
 ]

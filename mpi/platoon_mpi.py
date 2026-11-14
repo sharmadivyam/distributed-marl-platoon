@@ -25,6 +25,9 @@ Malicious (Byzantine) car: it keeps driving normally but lies in what it sends:
     --defense       every car checks its front car's claimed speed against its own radar
                     (speed estimated from how the gap changes) and ignores messages that disagree
                     by more than --defense-threshold m/s
+    --gossip        (with --defense) after --gossip-after rejected messages in a row, the car behind
+                    the liar warns the car in front of it directly (2-hop link, around the liar);
+                    both then ignore everything the liar sends
 When a message does not arrive in time, the car falls back to the last value it received
 (--fallback last) or estimates the front car's speed from its own radar (--fallback radar).
 
@@ -69,7 +72,7 @@ def read_config(run_dir):
     return config
 
 ROAD = 0
-TAG_SENSOR, TAG_CMD, TAG_BEACON, TAG_STATE = 1, 2, 3, 4
+TAG_SENSOR, TAG_CMD, TAG_BEACON, TAG_STATE, TAG_GOSSIP = 1, 2, 3, 4, 5
 FLOAT_BYTES = 4
 LEADER_ID = -1        # node id of the leader in logs (it lives on the road rank)
 
@@ -94,6 +97,10 @@ def parse_args():
                    help='check the front car\'s claimed speed against the own radar, ignore it if implausible')
     p.add_argument('--defense-threshold', type=float, default=2.0,
                    help='largest accepted difference between claimed and radar-estimated speed [m/s]')
+    p.add_argument('--gossip', action='store_true',
+                   help='with --defense: the car behind a liar warns the car in front of it (2-hop link)')
+    p.add_argument('--gossip-after', type=int, default=3,
+                   help='rejected messages in a row before a car accuses its front car')
     p.add_argument('--fallback', choices=['last', 'radar'], default='last',
                    help='what a car uses when the front car\'s message is missing')
     p.add_argument('--timeout-ms', type=float, default=50.0,
@@ -262,6 +269,8 @@ def car_main(comm, rank, args, config, run_dir):
     byz_tick = int(round(args.byzantine_at / env.dt)) if args.byzantine_car == i + 1 else None
     liar_rng = np.random.default_rng([args.seed, 7, rank])
     trusted = {}          # last message from each neighbour that passed the plausibility check
+    suspects = set()      # neighbours known to lie: everything they send is ignored
+    streak, accused = 0, None
     done, dead, h_prev, own = True, False, None, np.zeros(5)
 
     while True:
@@ -294,6 +303,21 @@ def car_main(comm, rank, args, config, run_dir):
         v_radar = v + (h - h_prev) / env.dt if h_prev is not None else None   # front car's speed from the radar
         rejected = bool(args.defense and not stale and v_radar is not None
                         and abs(msg['v'] - v_radar) > args.defense_threshold)
+        if args.gossip:
+            streak = streak + 1 if rejected else 0
+            if accused is None and streak >= args.gossip_after:
+                accused = i - 1                 # I am the witness: my radar keeps contradicting my front car
+                suspects.add(accused)
+            # warn the car two places ahead (the suspect's other neighbour) directly, around the suspect
+            if i >= 2:
+                v2v.send(t, rank - 2, TAG_GOSSIP, {'t': t, 'acc': accused}, 1, i, i - 2)
+            if i + 2 < n:
+                g, _ = v2v.recv(t, rank + 2, TAG_GOSSIP, timeout)
+                # witness rule: only car i+2 can check car i+1 with its radar, so only its word counts
+                if g is not None and g.get('acc') == i + 1:
+                    suspects.add(i + 1)
+        if i - 1 in suspects:
+            rejected = True                     # never trust a known liar's speed: use the radar
         if not stale and not rejected:
             v_lead = msg['v']
         elif (args.fallback == 'radar' or rejected) and v_radar is not None:
@@ -306,7 +330,10 @@ def car_main(comm, rank, args, config, run_dir):
                                        else liar_rng.uniform(-2, 2, 5))
 
         def checked(j, msg):
-            """The neighbour's message, unless it is the front car and its beacon just failed the check."""
+            """The neighbour's message, unless it is a known liar or the front car whose beacon just
+            failed the check."""
+            if j in suspects:
+                return None
             if rejected and j == i - 1:
                 return trusted.get(j)
             if msg is not None:
@@ -344,7 +371,8 @@ def car_main(comm, rank, args, config, run_dir):
         u_cmd = env.ovm.get_accel(v, v_lead, h, alpha, beta)
         comm.send({'t': t, 'u': u_cmd, 'a': action, 'sent': v2v.sent, 'bytes': v2v.bytes,
                    'dropped': v2v.dropped, 'lost': v2v.lost, 'stale': v2v.stale,
-                   'rejected': rejected, 'lying': lying},
+                   'rejected': rejected or bool(suspects & set(neighbours)), 'lying': lying,
+                   'accused': accused},
                   dest=ROAD, tag=TAG_CMD)
 
 
@@ -438,7 +466,8 @@ def road_main(comm, args, config):
         faults.append('car %d lies from %.0f s (%s)' % (
             args.byzantine_car, args.byzantine_at,
             'claims +%.0f m/s' % args.lie if args.attack == 'speed' else 'random values'))
-        faults.append('defence: radar check' if args.defense else 'no defence')
+        faults.append(('defence: radar check' + (' + gossip' if args.gossip else '')) if args.defense
+                      else 'no defence')
     if args.brake_at is not None:
         faults.append('leader brakes at %.0f s' % args.brake_at)
     if args.drop or args.delay or args.kill_car:
@@ -465,7 +494,8 @@ def road_main(comm, args, config):
                            'mk': tick_stats['sent'], 'bk': tick_stats['bytes'], 'mt': totals['sent'], 'bt': totals['bytes'],
                            'drop': tick_stats['dropped'], 'dropt': totals['dropped'], 'lost': tick_stats['lost'],
                            'stale': tick_stats['stale_cars'], 'dead': [i for i in range(n) if not alive[i]],
-                           'evil': tick_stats.get('evil', []), 'rej': tick_stats.get('rej', [])}]}
+                           'evil': tick_stats.get('evil', []), 'rej': tick_stats.get('rej', []),
+                           'acc': tick_stats.get('acc', [])}]}
 
     if log:
         log.write(json.dumps({'config': config_out}) + '\n')
@@ -485,7 +515,7 @@ def road_main(comm, args, config):
             v2v.send(t, 1, TAG_BEACON, {'t': t, 'v': float(env.v0s[t])}, 1, LEADER_ID, 0)   # leader's beacon
 
         stats = {'a': [0] * n, 'sent': v2v.sent, 'bytes': v2v.bytes, 'dropped': v2v.dropped,
-                 'lost': list(v2v.lost), 'stale_cars': [], 'evil': [], 'rej': []}
+                 'lost': list(v2v.lost), 'stale_cars': [], 'evil': [], 'rej': [], 'acc': []}
         u_cmd = np.zeros(n)
         for i in range(n):
             if not alive[i]:
@@ -505,6 +535,9 @@ def road_main(comm, args, config):
                 totals['stale'] += msg['stale']
             if msg.get('lying'):
                 stats['evil'].append(i)
+            if msg.get('accused') is not None:
+                stats['acc'].append([i, msg['accused']])
+                totals.setdefault('exposed_at', round(t * env.dt, 1))
             if msg.get('rejected'):
                 stats['rej'].append(i)
                 totals['rejected'] += 1
@@ -542,6 +575,7 @@ def road_main(comm, args, config):
                'msgs_dropped': totals['dropped'], 'stale_reads': totals['stale'],
                'byzantine_car': args.byzantine_car, 'attack': args.attack if args.byzantine_car else None,
                'defense': args.defense, 'rejected_msgs': totals['rejected'],
+               'gossip': args.gossip, 'liar_exposed_at': totals.get('exposed_at'),
                'wall_s': round(wall, 2), 'ms_per_step': round(1000 * wall / max(1, len(rewards)), 2),
                'rewards': rewards}
     if log:

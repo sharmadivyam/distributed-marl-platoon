@@ -287,6 +287,21 @@ function drawRoad(k, alpha) {
       ctx.restore();
     }
   });
+  for (const [w, liar] of (L1.acc || [])) {          // gossip: the witness warns the car in front of the liar
+    const x0 = pos(w), x1 = pos(Math.max(w - 2, -1)), top = yFwd - 2;
+    ctx.save();
+    ctx.strokeStyle = '#c9a2ff';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 3]);
+    ctx.beginPath(); ctx.moveTo(x0, yCar - carH / 2 - 2);
+    ctx.quadraticCurveTo((x0 + x1) / 2, top - 10, x1, yCar - carH / 2 - 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#d7b8ff';
+    ctx.font = '600 10px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`car ${w + 1}: "car ${liar + 1} lies!"`, (x0 + x1) / 2, top - 8);
+    ctx.restore();
+  }
   for (const [src, dst] of (L1.lost || [])) {         // messages lost this step
     const mx = (pos(src) + pos(dst)) / 2, my = src < dst ? yFwd : yBwd;
     ctx.strokeStyle = '#ff4d4d';

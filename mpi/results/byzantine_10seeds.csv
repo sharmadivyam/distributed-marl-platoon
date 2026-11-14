@@ -1,0 +1,37 @@
+controller,attack,defense,seeds,mean_reward,std_reward,collisions,rejected_per_run,caught_share
+fixed,none,False,10,-159.77,34.99,0,0.0,
+fixed,none,True,10,-159.77,34.99,0,0.0,
+fixed,lie 1.5 m/s,False,10,-161.87,34.94,0,0.0,
+fixed,lie 1.5 m/s,True,10,-161.87,34.94,0,0.0,0.0
+fixed,lie 3 m/s,False,10,-165.29,34.91,0,0.0,
+fixed,lie 3 m/s,True,10,-159.8,34.99,0,350.0,1.0
+fixed,lie 5 m/s,False,10,-172.26,34.86,0,0.0,
+fixed,lie 5 m/s,True,10,-159.8,34.99,0,350.0,1.0
+fixed,lie 10 m/s,False,10,-192.04,53.4,10,0.0,
+fixed,lie 10 m/s,True,10,-159.8,34.99,0,350.0,1.0
+fixed,random values,False,10,-168.02,55.2,10,0.0,
+fixed,random values,True,10,-159.69,35.02,0,301.2,0.861
+ia2c,none,False,10,-166.06,17.59,0,0.0,
+ia2c,none,True,10,-166.06,17.59,0,0.0,
+ia2c,lie 1.5 m/s,False,10,-168.12,17.59,0,0.0,
+ia2c,lie 1.5 m/s,True,10,-168.12,17.59,0,0.0,0.0
+ia2c,lie 3 m/s,False,10,-171.52,17.59,0,0.0,
+ia2c,lie 3 m/s,True,10,-166.06,17.59,0,350.0,1.0
+ia2c,lie 5 m/s,False,10,-178.49,17.59,0,0.0,
+ia2c,lie 5 m/s,True,10,-166.06,17.59,0,350.0,1.0
+ia2c,lie 10 m/s,False,10,-221.16,17.59,0,0.0,
+ia2c,lie 10 m/s,True,10,-166.06,17.59,0,350.0,1.0
+ia2c,random values,False,10,-186.38,34.18,3,0.0,
+ia2c,random values,True,10,-166.16,17.58,0,300.6,0.859
+neurcomm,none,False,10,-207.22,40.61,0,0.0,
+neurcomm,none,True,10,-207.22,40.61,0,0.0,
+neurcomm,lie 1.5 m/s,False,10,-212.26,38.14,0,0.0,
+neurcomm,lie 1.5 m/s,True,10,-212.26,38.14,0,0.0,0.0
+neurcomm,lie 3 m/s,False,10,-221.6,36.19,0,0.0,
+neurcomm,lie 3 m/s,True,10,-210.49,37.23,0,350.0,1.0
+neurcomm,lie 5 m/s,False,10,-225.5,35.49,0,0.0,
+neurcomm,lie 5 m/s,True,10,-210.49,37.23,0,350.0,1.0
+neurcomm,lie 10 m/s,False,10,-204.42,40.09,0,0.0,
+neurcomm,lie 10 m/s,True,10,-210.49,37.23,0,350.0,1.0
+neurcomm,random values,False,10,-204.09,40.23,0,0.0,
+neurcomm,random values,True,10,-204.34,40.09,0,302.5,0.864

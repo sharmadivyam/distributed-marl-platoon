@@ -44,6 +44,12 @@ SECTIONS = [
      ['--byzantine-car', '4', '--byzantine-at', '25', '--attack', 'noise', '--brake-at', '30', '--defense'],
      'Same attack. Every car compares its front car\'s claimed speed with what its own radar says '
      '(how fast the gap changes) and ignores messages that disagree by more than 2 m/s.'),
+    ('liar_gossip', 'Car 4 is malicious, radar check + gossip', CONTROLLERS,
+     ['--byzantine-car', '4', '--byzantine-at', '25', '--attack', 'noise', '--brake-at', '30', '--defense',
+      '--gossip'],
+     'Car 3 cannot check car 4 (its radar looks forward). So after 3 lies in a row, car 5 warns car 3 '
+     'directly over a 2-hop link, around the liar; from then on cars 3 and 5 ignore car 4. Car 3 only '
+     'believes car 5, the one car whose radar can check car 4 (witness rule).'),
 ]
 
 

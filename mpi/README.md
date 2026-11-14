@@ -67,6 +67,7 @@ Any single log can also be replayed: `--replay mpi/logs/<run>.jsonl [more logs]`
 | `--byzantine-car 4 --byzantine-at 25` | car 4 keeps driving but lies in its messages from 25 s |
 | `--attack speed\|noise`, `--lie 10` | claim a false speed (+10 m/s) or send random values |
 | `--defense` | each car checks the front car's claimed speed against its own radar |
+| `--gossip` | with `--defense`: the car behind a liar warns the car in front of it (2-hop link) |
 | `--brake-at 30` | the leader brakes at 30 s |
 | `--fallback last\|radar` | when a message is missing: reuse the last value, or estimate the front car's speed from the car's own radar |
 | `--cars 16` | bigger platoon (fixed controller only); use `-np 17` |
@@ -150,6 +151,31 @@ radar implies (how fast the gap changes) and ignores the message when they diffe
 2 m/s. No message was rejected in runs without a liar (no false alarms). The car in front of the
 liar cannot check it (the radar only looks forward), which is why NeurComm, whose messages also go
 forward, is not fully protected.
+
+**Malicious car on 10 seeds** (`python mpi/experiments.py --byzantine 10`, graph
+`results/byzantine_10seeds.png`): car 4 lies from 25 s, the leader brakes at 30 s.
+
+| What car 4 sends | Fixed, no defence | IA2C, no defence | NeurComm, no defence | Lies caught by the radar check |
+|---|---|---|---|---|
+| nothing false | −159.8, 0/10 crashed | −166.1, 0/10 | −207.2, 0/10 | 0 false alarms in 30 runs |
+| +1.5 m/s | −161.9, 0/10 | −168.1, 0/10 | −212.3, 0/10 | 0% (below the 2 m/s threshold) |
+| +5 m/s | −172.3, 0/10 | −178.5, 0/10 | −225.5, 0/10 | 100% |
+| +10 m/s | **10/10 crashed** | −221.2, 0/10 | −204.4, 0/10 | 100% |
+| random values | **10/10 crashed** | **3/10 crashed** | −204.1, 0/10 | 86% (the rest were close to the truth) |
+
+With the radar check on, no run crashed and Fixed and IA2C got back exactly their no-liar
+scores. Small lies slip through the check but also do little harm; big lies are always caught.
+NeurComm did not crash under any lie (we do not fully know why yet; it reacts much more to late
+messages than to false ones).
+
+**Gossip** (`--defense --gossip`): the car behind the liar is the only one whose radar can check
+it. After 3 rejected messages in a row it warns the car in front of the liar directly over a
+2-hop link (around the liar), and both then ignore the liar. Witness rule: a car only believes an
+accusation about its back neighbour from the car right behind that neighbour. On seed 100000 the
+liar is exposed 0.2 s after it starts lying, and NeurComm goes from −197.8 (radar check only) to
+−191.1 (no-liar score −191.7). Cost: one tiny gossip message per car per step. Limit: the liar is
+itself the witness for the car in front of it, so it could falsely accuse that car; stopping this
+needs more witnesses or signed messages.
 
 **Crashed car process:** car 4 goes silent at 25 s, the leader brakes at 30 s: collision at
 37.0 s (fixed) and 37.9 s (IA2C). Without the crash: no collision.

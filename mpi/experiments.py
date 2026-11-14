@@ -142,7 +142,7 @@ def run_quiet(controller, seed, flags, cars=8):
     cmd = ['mpirun', '--oversubscribe', '-np', str(cars + 1), sys.executable, PROG, '--controller', controller,
            '--seed', str(seed), '--fast-faults', '--timeout-ms', '5000', '--log', log]
     for key, value in flags.items():
-        cmd += ['--' + key.replace('_', '-'), str(value)]
+        cmd += ['--' + key.replace('_', '-')] + ([] if value is True else [str(value)])
     done = os.path.exists(log) and '"summary"' in open(log).read()[-200000:]
     if not done:            # runs are deterministic, so a finished log can be reused
         subprocess.run(cmd, cwd=REPO, check=True, capture_output=True)
@@ -211,13 +211,88 @@ def multiseed_sweep(kind, values, fmt, seeds, workers=3, controllers=('fixed', '
     return rows
 
 
+ATTACKS = [('none', {}), ('lie 1.5 m/s', {'lie': 1.5}), ('lie 3 m/s', {'lie': 3}), ('lie 5 m/s', {'lie': 5}),
+           ('lie 10 m/s', {'lie': 10}), ('random values', {'attack': 'noise'})]
+
+
+def byzantine_sweep(seeds, workers=3, controllers=('fixed', 'ia2c', 'neurcomm')):
+    """Car 4 lies from 25 s, the leader brakes at 30 s; with and without the radar check."""
+    from concurrent.futures import ThreadPoolExecutor
+    os.makedirs(os.path.join(LOGS, 'multi'), exist_ok=True)
+    jobs = []
+    for controller in controllers:
+        for name, attack in ATTACKS:
+            for defense in (False, True):
+                flags = {'brake_at': 30}
+                if attack:
+                    flags.update({'byzantine_car': 4, 'byzantine_at': 25}, **attack)
+                if defense:
+                    flags['defense'] = True
+                for seed in seeds:
+                    jobs.append((controller, name, defense, seed, flags))
+    with ThreadPoolExecutor(workers) as pool:
+        results = list(pool.map(lambda j: (j, run_quiet(j[0], j[3], j[4])), jobs))
+    rows = []
+    for controller in controllers:
+        for name, attack in ATTACKS:
+            for defense in (False, True):
+                runs = [s for (c, a, d, _, _), s in results if (c, a, d) == (controller, name, defense)]
+                rewards = np.array([r['avg_reward'] for r in runs])
+                lying_ticks = [max(1, r['steps'] - 250) for r in runs]
+                rejected = [r['rejected_msgs'] for r in runs]
+                rows.append({'controller': controller, 'attack': name, 'defense': defense, 'seeds': len(runs),
+                             'mean_reward': round(float(rewards.mean()), 2),
+                             'std_reward': round(float(rewards.std()), 2),
+                             'collisions': sum(r['collision_t'] is not None for r in runs),
+                             # with a liar: share of its lies the car behind caught; without: false alarms
+                             'rejected_per_run': round(float(np.mean(rejected)), 1),
+                             'caught_share': round(float(np.mean([x / n for x, n in zip(rejected, lying_ticks)])), 3)
+                             if attack and defense else ''})
+                print('  %-8s %-14s defence %-3s  reward %8.1f +- %6.1f   collisions %d/%d   rejected/run %.0f'
+                      % (controller, name, 'on' if defense else 'off', rewards.mean(), rewards.std(),
+                         rows[-1]['collisions'], len(runs), rows[-1]['rejected_per_run']), flush=True)
+    write_csv(rows, os.path.join(OUT, 'byzantine_%dseeds.csv' % len(seeds)))
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.6), sharey=True)
+    x = np.arange(len(ATTACKS))
+    width = 0.26
+    for ax, defense in zip(axes, (False, True)):
+        for k, controller in enumerate(controllers):
+            pts = [r for r in rows if r['controller'] == controller and r['defense'] == defense]
+            xs = x + (k - 1) * width
+            ax.bar(xs, [-r['mean_reward'] for r in pts], width, color=CONTROLLER_COLORS[controller],
+                   label=LABELS[controller])
+            for xx, r in zip(xs, pts):
+                if r['collisions']:
+                    ax.text(xx, -r['mean_reward'] / 2, '%d/%d crashed' % (r['collisions'], r['seeds']),
+                            ha='center', va='center', rotation=90, fontsize=8, color='white', fontweight='bold')
+        ax.set_xticks(x)
+        ax.set_xticklabels([a for a, _ in ATTACKS], fontsize=8.5)
+        style(ax, 'what car 4 sends from 25 s (leader brakes at 30 s)',
+              'avg penalty per step (lower is better)' if not defense else '',
+              'Radar check ON' if defense else 'No defence')
+        ax.set_ylim(0, 270)
+        ax.legend(frameon=False, fontsize=8.5, loc='upper left', ncol=3)
+    fig.suptitle('Malicious car on MPI, %d test seeds (bars = mean penalty; white text = runs that ended in a collision)'
+                 % len(seeds), x=0.01, ha='left', fontsize=12)
+    fig.tight_layout()
+    fig.savefig(os.path.join(OUT, 'byzantine_%dseeds.png' % len(seeds)), dpi=160)
+    plt.close(fig)
+    return rows
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--only', choices=['drop', 'delay', 'scaling'], default=None)
     p.add_argument('--plot-only', action='store_true', help='redraw the sweep graphs from the saved CSVs')
+    p.add_argument('--byzantine', type=int, default=0, help='run the malicious-car sweep on this many test seeds')
     p.add_argument('--test-seeds', type=int, default=0,
                    help='run the loss and delay sweeps on this many test seeds (fast fault mode, in parallel)')
     args = p.parse_args()
+    if args.byzantine:
+        print('malicious-car sweep, %d seeds' % args.byzantine)
+        byzantine_sweep([100000 + 10 * k for k in range(args.byzantine)])
+        return
     if args.test_seeds:
         seeds = [100000 + 10 * k for k in range(args.test_seeds)]
         print('1) message loss sweep, %d seeds' % len(seeds))
