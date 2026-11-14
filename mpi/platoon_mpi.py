@@ -19,6 +19,12 @@ Fault injection on the V2V links:
     --drop 0.2                      each V2V message is lost with probability 0.2
     --delay 3                       V2V messages arrive 3 steps (0.3 s) late
     --kill-car 4 --kill-at 30       car 4's process goes silent at t = 30 s (crash-stop)
+Malicious (Byzantine) car: it keeps driving normally but lies in what it sends:
+    --byzantine-car 4 --byzantine-at 20 --attack speed --lie 5   claims to be 5 m/s faster than it is
+    --attack noise                                               sends random values (NeurComm: random hidden state)
+    --defense       every car checks its front car's claimed speed against its own radar
+                    (speed estimated from how the gap changes) and ignores messages that disagree
+                    by more than --defense-threshold m/s
 When a message does not arrive in time, the car falls back to the last value it received
 (--fallback last) or estimates the front car's speed from its own radar (--fallback radar).
 
@@ -79,6 +85,15 @@ def parse_args():
     p.add_argument('--delay', type=int, default=0, help='V2V messages arrive this many steps late')
     p.add_argument('--kill-car', type=int, default=None, help='car number (1..N) whose process crashes')
     p.add_argument('--kill-at', type=float, default=30.0, help='time of the crash [s]')
+    p.add_argument('--byzantine-car', type=int, default=None, help='car number (1..N) that lies in its messages')
+    p.add_argument('--byzantine-at', type=float, default=20.0, help='time when it starts lying [s]')
+    p.add_argument('--attack', choices=['speed', 'noise'], default='speed',
+                   help='speed: claim a false speed (+ --lie m/s); noise: send random values')
+    p.add_argument('--lie', type=float, default=5.0, help='speed attack: claimed speed minus true speed [m/s]')
+    p.add_argument('--defense', action='store_true',
+                   help='check the front car\'s claimed speed against the own radar, ignore it if implausible')
+    p.add_argument('--defense-threshold', type=float, default=2.0,
+                   help='largest accepted difference between claimed and radar-estimated speed [m/s]')
     p.add_argument('--fallback', choices=['last', 'radar'], default='last',
                    help='what a car uses when the front car\'s message is missing')
     p.add_argument('--timeout-ms', type=float, default=50.0,
@@ -244,6 +259,9 @@ def car_main(comm, rank, args, config, run_dir):
     comm.gather(MPI.Get_processor_name(), root=ROAD)   # tell the road which machine I run on
     comm.Barrier()       # start together: no car may look "crashed" just because it loaded slowly
     kill_tick = int(round(args.kill_at / env.dt)) if args.kill_car == i + 1 else None
+    byz_tick = int(round(args.byzantine_at / env.dt)) if args.byzantine_car == i + 1 else None
+    liar_rng = np.random.default_rng([args.seed, 7, rank])
+    trusted = {}          # last message from each neighbour that passed the plausibility check
     done, dead, h_prev, own = True, False, None, np.zeros(5)
 
     while True:
@@ -258,41 +276,64 @@ def car_main(comm, rank, args, config, run_dir):
         v2v.new_tick()
         v2v.flush(t)
         v, h, u = sensor['v'], sensor['h'], sensor['u']
+        lying = byz_tick is not None and t >= byz_tick
+        if not lying:
+            v_claim = v
+        elif args.attack == 'speed':
+            v_claim = v + args.lie                           # Byzantine: "I am faster than I am"
+        else:
+            v_claim = float(liar_rng.uniform(0, 2 * env.v_star))
 
         # V2V round 1: beacon (my speed) to the car behind, beacon from the car in front
         if args.controller in NO_V2V:
             msg, stale = {'v': v}, False      # no messages; the front car's speed is not used (beta = 0)
         elif i < n - 1:
-            v2v.send(t, rank + 1, TAG_BEACON, {'t': t, 'v': v}, 1, i, i + 1)
+            v2v.send(t, rank + 1, TAG_BEACON, {'t': t, 'v': v_claim}, 1, i, i + 1)
         if args.controller not in NO_V2V:
             msg, stale = v2v.recv(t, ROAD if i == 0 else rank - 1, TAG_BEACON, timeout)
-        if not stale:
+        v_radar = v + (h - h_prev) / env.dt if h_prev is not None else None   # front car's speed from the radar
+        rejected = bool(args.defense and not stale and v_radar is not None
+                        and abs(msg['v'] - v_radar) > args.defense_threshold)
+        if not stale and not rejected:
             v_lead = msg['v']
-        elif args.fallback == 'radar' and h_prev is not None:
-            v_lead = v + (h - h_prev) / env.dt  # front car's speed estimated from the radar gap
+        elif (args.fallback == 'radar' or rejected) and v_radar is not None:
+            v_lead = v_radar
         else:
             v_lead = msg['v'] if msg is not None else v
         h_prev = h
         own = local_state(env, v, h, u, v_lead)
+        claim = own if not lying else (local_state(env, v_claim, h, u, v_lead) if args.attack == 'speed'
+                                       else liar_rng.uniform(-2, 2, 5))
+
+        def checked(j, msg):
+            """The neighbour's message, unless it is the front car and its beacon just failed the check."""
+            if rejected and j == i - 1:
+                return trusted.get(j)
+            if msg is not None:
+                trusted[j] = msg
+            return msg
 
         # V2V round 2 (IA2C only): share observations with both neighbours, then act
         if args.controller == 'ia2c':
             for j in neighbours:
-                v2v.send(t, j + 1, TAG_STATE, {'t': t, 's': own}, 5, i, j)
+                v2v.send(t, j + 1, TAG_STATE, {'t': t, 's': claim}, 5, i, j)
             parts = [own]
             for j in neighbours:
-                msg, _ = v2v.recv(t, j + 1, TAG_STATE, timeout)
+                msg = checked(j, v2v.recv(t, j + 1, TAG_STATE, timeout)[0])
                 parts.append(msg['s'] if msg is not None else np.zeros(5))
             pi = policy.forward(np.concatenate(parts), done)
             action = int(np.argmax(pi))
         elif args.controller == 'neurcomm':
             # V2V round 2 (NeurComm): observation + last policy + last LSTM hidden state to both neighbours
-            out = dict(nc.message(own), t=t)
+            out = dict(nc.message(claim), t=t)
+            if lying and args.attack == 'noise':            # fake "thoughts" and a fake last decision
+                out['h'] = liar_rng.uniform(-1, 1, nc.n_h)
+                out['p'] = liar_rng.dirichlet(np.ones(nc.n_a))
             for j in neighbours:
                 v2v.send(t, j + 1, TAG_STATE, out, nc_floats, i, j)
             msgs = []
             for j in neighbours:
-                msg, _ = v2v.recv(t, j + 1, TAG_STATE, timeout)
+                msg = checked(j, v2v.recv(t, j + 1, TAG_STATE, timeout)[0])
                 msgs.append(msg if msg is not None else silent)
             action = nc.act(own, msgs, done)
         else:
@@ -302,7 +343,8 @@ def car_main(comm, rank, args, config, run_dir):
         alpha, beta = env.a_map[action]
         u_cmd = env.ovm.get_accel(v, v_lead, h, alpha, beta)
         comm.send({'t': t, 'u': u_cmd, 'a': action, 'sent': v2v.sent, 'bytes': v2v.bytes,
-                   'dropped': v2v.dropped, 'lost': v2v.lost, 'stale': v2v.stale},
+                   'dropped': v2v.dropped, 'lost': v2v.lost, 'stale': v2v.stale,
+                   'rejected': rejected, 'lying': lying},
                   dest=ROAD, tag=TAG_CMD)
 
 
@@ -380,7 +422,9 @@ def road_main(comm, args, config):
     v2v = V2V(comm, ROAD, args)
     alive, crashed_at = [True] * n, {}
     rewards, x_leader = [], 0.0
-    totals = {'sent': 0, 'bytes': 0, 'dropped': 0, 'stale': 0}
+    totals = {'sent': 0, 'bytes': 0, 'dropped': 0, 'stale': 0, 'rejected': 0}
+    if args.log and os.path.dirname(args.log):
+        os.makedirs(os.path.dirname(args.log), exist_ok=True)
     log = open(args.log, 'w') if args.log else None
     label = '%s on MPI: %d car processes + 1 road process' % (LABELS[args.controller], n)
     faults = []
@@ -390,6 +434,11 @@ def road_main(comm, args, config):
         faults.append('%.1f s delay' % (args.delay * env.dt))
     if args.kill_car:
         faults.append('car %d crashes at %.0f s' % (args.kill_car, args.kill_at))
+    if args.byzantine_car:
+        faults.append('car %d lies from %.0f s (%s)' % (
+            args.byzantine_car, args.byzantine_at,
+            'claims +%.0f m/s' % args.lie if args.attack == 'speed' else 'random values'))
+        faults.append('defence: radar check' if args.defense else 'no defence')
     if args.brake_at is not None:
         faults.append('leader brakes at %.0f s' % args.brake_at)
     if args.drop or args.delay or args.kill_car:
@@ -415,7 +464,8 @@ def road_main(comm, args, config):
                            'ravg': round(float(np.mean(rewards)), 1) if rewards else None,
                            'mk': tick_stats['sent'], 'bk': tick_stats['bytes'], 'mt': totals['sent'], 'bt': totals['bytes'],
                            'drop': tick_stats['dropped'], 'dropt': totals['dropped'], 'lost': tick_stats['lost'],
-                           'stale': tick_stats['stale_cars'], 'dead': [i for i in range(n) if not alive[i]]}]}
+                           'stale': tick_stats['stale_cars'], 'dead': [i for i in range(n) if not alive[i]],
+                           'evil': tick_stats.get('evil', []), 'rej': tick_stats.get('rej', [])}]}
 
     if log:
         log.write(json.dumps({'config': config_out}) + '\n')
@@ -435,7 +485,7 @@ def road_main(comm, args, config):
             v2v.send(t, 1, TAG_BEACON, {'t': t, 'v': float(env.v0s[t])}, 1, LEADER_ID, 0)   # leader's beacon
 
         stats = {'a': [0] * n, 'sent': v2v.sent, 'bytes': v2v.bytes, 'dropped': v2v.dropped,
-                 'lost': list(v2v.lost), 'stale_cars': []}
+                 'lost': list(v2v.lost), 'stale_cars': [], 'evil': [], 'rej': []}
         u_cmd = np.zeros(n)
         for i in range(n):
             if not alive[i]:
@@ -453,6 +503,11 @@ def road_main(comm, args, config):
             if msg['stale']:
                 stats['stale_cars'].append(i)
                 totals['stale'] += msg['stale']
+            if msg.get('lying'):
+                stats['evil'].append(i)
+            if msg.get('rejected'):
+                stats['rej'].append(i)
+                totals['rejected'] += 1
         for key in ('sent', 'bytes', 'dropped'):
             totals[key] += stats[key]
 
@@ -485,6 +540,8 @@ def road_main(comm, args, config):
                'avg_reward': float(np.mean(rewards)), 'collision_t': collision_t,
                'crashed_cars': crashed_at, 'msgs_sent': totals['sent'], 'bytes_sent': totals['bytes'],
                'msgs_dropped': totals['dropped'], 'stale_reads': totals['stale'],
+               'byzantine_car': args.byzantine_car, 'attack': args.attack if args.byzantine_car else None,
+               'defense': args.defense, 'rejected_msgs': totals['rejected'],
                'wall_s': round(wall, 2), 'ms_per_step': round(1000 * wall / max(1, len(rewards)), 2),
                'rewards': rewards}
     if log:

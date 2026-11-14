@@ -17,6 +17,7 @@
 </header>
 
 <section class="controls">
+  <label id="sectionwrap" hidden>Section <select id="section"></select></label>
   <button id="play" class="primary" title="Space">&#9654; Play</button>
   <button id="reset" title="R">&#10226; Reset</button>
   <label>Scenario
@@ -39,6 +40,8 @@
   <span class="net"><span class="pill" id="netpill">Network: perfect delivery</span></span>
 </section>
 
+<p id="about" class="about" hidden></p>
+
 <div id="banner" class="banner" hidden>Lost connection to the simulator. Is <code>python -m simulator.server</code> still running?</div>
 
 <main id="lanes"></main>
@@ -52,6 +55,7 @@
   <span><i class="dot" style="width:7px;height:7px;background:var(--msg-beacon)"></i>beacon: front car's speed (4 bytes)</span>
   <span><i class="dot" style="width:10px;height:10px;background:var(--msg-data)"></i>shared observation (IA2C, 20 bytes) or NeurComm message (292 bytes, drawn bigger)</span>
   <span><i class="sw" style="background:#6b7078"></i>crashed car process</span>
+  <span><i class="sw" style="background:#8e4ec6"></i>liar: sends false messages &middot; <i>ignored</i>: its radar check rejected a message</span>
   <span><i class="sw" style="background:transparent;border:1.5px dashed var(--muted)"></i>car using an old or estimated value</span>
   <span style="color:#d64541;font-weight:600">&#10005;</span><span style="margin-left:-12px">message lost</span>
   <span class="keys">Keys: <kbd>Space</kbd> play/pause &middot; <kbd>B</kbd> brake &middot; <kbd>R</kbd> reset</span>

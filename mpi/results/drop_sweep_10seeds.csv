@@ -19,3 +19,13 @@ drop,ia2c,radar,0.1,10,-29.04,17.62,0
 drop,ia2c,radar,0.2,10,-29.08,17.63,0
 drop,ia2c,radar,0.3,10,-29.12,17.65,0
 drop,ia2c,radar,0.5,10,-29.21,17.7,0
+drop,neurcomm,last,0,10,-75.78,43.43,0
+drop,neurcomm,last,0.1,10,-76.48,43.16,0
+drop,neurcomm,last,0.2,10,-76.98,43.45,0
+drop,neurcomm,last,0.3,10,-78.17,44.3,0
+drop,neurcomm,last,0.5,10,-84.8,51.67,0
+drop,neurcomm,radar,0,10,-75.78,43.43,0
+drop,neurcomm,radar,0.1,10,-76.17,43.87,0
+drop,neurcomm,radar,0.2,10,-76.98,43.86,0
+drop,neurcomm,radar,0.3,10,-77.44,44.17,0
+drop,neurcomm,radar,0.5,10,-78.76,44.58,0

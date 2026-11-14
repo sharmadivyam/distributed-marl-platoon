@@ -27,7 +27,8 @@ LOGS = os.path.join(OUT, 'logs')
 PROG = os.path.join(REPO, 'mpi', 'platoon_mpi.py')
 COLORS = {('fixed', 'last'): '#52514e', ('fixed', 'radar'): '#a3a8ae',
           ('ia2c', 'last'): '#eb6834', ('ia2c', 'radar'): '#f5b08f'}
-LABELS = {'fixed': 'Fixed controller', 'ia2c': 'IA2C'}
+LABELS = {'fixed': 'Fixed controller', 'ia2c': 'IA2C', 'neurcomm': 'NeurComm'}
+CONTROLLER_COLORS = {'fixed': '#52514e', 'ia2c': '#eb6834', 'neurcomm': '#2a78d6'}
 
 
 def run(controller, cars=8, timeout_ms=30, **flags):
@@ -142,18 +143,20 @@ def run_quiet(controller, seed, flags, cars=8):
            '--seed', str(seed), '--fast-faults', '--timeout-ms', '5000', '--log', log]
     for key, value in flags.items():
         cmd += ['--' + key.replace('_', '-'), str(value)]
-    subprocess.run(cmd, cwd=REPO, check=True, capture_output=True)
+    done = os.path.exists(log) and '"summary"' in open(log).read()[-200000:]
+    if not done:            # runs are deterministic, so a finished log can be reused
+        subprocess.run(cmd, cwd=REPO, check=True, capture_output=True)
     with open(log) as f:
         s = [json.loads(line)['summary'] for line in f if line.startswith('{"summary"')][0]
     s.pop('rewards')
     return s
 
 
-def multiseed_sweep(kind, values, fmt, seeds, workers=3):
+def multiseed_sweep(kind, values, fmt, seeds, workers=3, controllers=('fixed', 'ia2c', 'neurcomm')):
     from concurrent.futures import ThreadPoolExecutor
     os.makedirs(os.path.join(LOGS, 'multi'), exist_ok=True)
     jobs = []
-    for controller in ('fixed', 'ia2c'):
+    for controller in controllers:
         for fallback in ('last', 'radar'):
             for value in values:
                 flags = {'fallback': fallback}
@@ -164,7 +167,7 @@ def multiseed_sweep(kind, values, fmt, seeds, workers=3):
     with ThreadPoolExecutor(workers) as pool:
         results = list(pool.map(lambda j: (j, run_quiet(j[0], j[3], j[4])), jobs))
     rows = []
-    for controller in ('fixed', 'ia2c'):
+    for controller in controllers:
         for fallback in ('last', 'radar'):
             for value in values:
                 runs = [s for (c, fb, v, _, _), s in results if (c, fb, v) == (controller, fallback, value)]
@@ -173,33 +176,35 @@ def multiseed_sweep(kind, values, fmt, seeds, workers=3):
                 rows.append({'sweep': kind, 'controller': controller, 'fallback': fallback, 'value': value,
                              'seeds': len(runs), 'mean_reward': round(float(rewards.mean()), 2),
                              'std_reward': round(float(rewards.std()), 2), 'collisions': crashes})
-                print('  %-5s %-5s %s=%-4s  reward %8.1f +- %6.1f   collisions %d/%d'
+                print('  %-8s %-5s %s=%-4s  reward %8.1f +- %6.1f   collisions %d/%d'
                       % (controller, fallback, kind, value, rewards.mean(), rewards.std(), crashes, len(runs)),
                       flush=True)
     write_csv(rows, os.path.join(OUT, '%s_sweep_%dseeds.csv' % (kind, len(seeds))))
 
-    fig, ax = plt.subplots(figsize=(7.5, 4.4))
-    for controller in ('fixed', 'ia2c'):
-        for fallback in ('last', 'radar'):
+    # one panel per fallback, one line per controller
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.6), sharey=True)
+    for ax, fallback in zip(axes, ('last', 'radar')):
+        for controller in controllers:
             pts = [r for r in rows if r['controller'] == controller and r['fallback'] == fallback]
             xs = [fmt(r['value']) for r in pts]
             ys = [r['mean_reward'] for r in pts]
             ax.errorbar(xs, ys, yerr=[r['std_reward'] for r in pts], marker='o', capsize=3, linewidth=2,
-                        color=COLORS[(controller, fallback)],
-                        label='%s, fallback: %s' % (LABELS[controller], 'radar estimate' if fallback == 'radar' else 'last value'))
+                        color=CONTROLLER_COLORS[controller], label=LABELS[controller])
             for r, x, y in zip(pts, xs, ys):
                 if r['collisions']:
                     ax.annotate('%d/%d crashed' % (r['collisions'], r['seeds']), (x, y), textcoords='offset points',
                                 xytext=(6, -12), fontsize=7.5, color='#c0392b')
-    if kind == 'delay':
-        ax.set_yscale('symlog', linthresh=10)
-        ticks = [-20, -30, -50, -100, -200, -500, -1000]
-        ax.set_yticks(ticks)
-        ax.set_yticklabels([str(t) for t in ticks])
-    style(ax, 'V2V messages lost [%]' if kind == 'drop' else 'V2V message delay [s]',
-          'avg reward per step (mean +- std over %d seeds)' % len(seeds),
-          'Platoon under %s, %d test seeds' % ('message loss' if kind == 'drop' else 'message delay', len(seeds)))
-    ax.legend(frameon=False, fontsize=8, loc='lower left')
+        if kind == 'delay':
+            ax.set_yscale('symlog', linthresh=10)
+            ticks = [-20, -30, -50, -100, -200, -500, -1000]
+            ax.set_yticks(ticks)
+            ax.set_yticklabels([str(t) for t in ticks])
+        style(ax, 'V2V messages lost [%]' if kind == 'drop' else 'V2V message delay [s]',
+              'avg reward per step (mean +- std over %d seeds)' % len(seeds) if fallback == 'last' else '',
+              'Missing message -> %s' % ('reuse the last value' if fallback == 'last' else 'estimate from own radar'))
+        ax.legend(frameon=False, fontsize=8.5, loc='lower left')
+    fig.suptitle('Platoon on MPI under %s, %d test seeds (higher is better)'
+                 % ('message loss' if kind == 'drop' else 'message delay', len(seeds)), x=0.01, ha='left', fontsize=12)
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, '%s_sweep_%dseeds.png' % (kind, len(seeds))), dpi=160)
     plt.close(fig)

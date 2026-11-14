@@ -8,6 +8,7 @@ const COL = {
   good: C('--good'), warn: C('--warn'), bad: C('--bad'), leader: C('--leader'),
   beacon: C('--msg-beacon'), data: C('--msg-data'),
 };
+const LIAR = '#8e4ec6';      // malicious (Byzantine) car
 const MSG_STYLE = {
   beacon: { color: COL.beacon, r: 2.6 },
   state: { color: COL.data, r: 3.4 },
@@ -87,14 +88,27 @@ function fillControls(cfg) {
   seed.value = String(cfg.seed);
   $('scenario').value = cfg.scenario;
   for (const id of ['brake', 'scenario', 'seed']) $(id).disabled = !!cfg.replay;
+  // a replay cannot change these, so hide them instead of showing them greyed out
+  $('scenario').parentElement.hidden = $('seed').parentElement.hidden = $('brake').hidden = !!cfg.replay;
   $('brake').title = cfg.replay ? 'Recorded run: the leader\'s braking is part of the recording' : 'B';
   $('auto').textContent = cfg.replay ? 'Replay from start' : 'Auto demo';
   $('netpill').textContent = cfg.network ? cfg.network : 'Network: perfect delivery';
+  const sections = cfg.sections || [];
+  $('sectionwrap').hidden = sections.length < 2;
+  if (sections.length > 1) {
+    const sel = $('section');
+    const opts = sections.map((t, k) => `<option value="${k}">${k + 1}. ${t}</option>`).join('');
+    if (sel.innerHTML !== opts) sel.innerHTML = opts;
+    sel.value = String(cfg.section);
+  }
+  $('about').hidden = !cfg.about;
+  $('about').textContent = cfg.about || '';
 }
 
 // ------------------------------------------------------------------ stream
 function onConfig(cfg) {
-  const rebuild = !S.cfg || S.cfg.lanes.length !== cfg.lanes.length;
+  const labels = (c) => c.lanes.map((l) => l.label).join('|');
+  const rebuild = !S.cfg || labels(S.cfg) !== labels(cfg);
   S.cfg = cfg;
   if (rebuild) buildLanes(cfg);
   cfg.lanes.forEach((lane, k) => { ui[k].minGap = Infinity; });
@@ -235,6 +249,7 @@ function drawRoad(k, alpha) {
   const carH = 20;
   drawCar(ctx, X(0), yCar, carW, carH, COL.leader, 'L', '#1b1b1a', moving && S.cur.ul < -BRAKE_LIGHT);
   const dead = new Set(L1.dead || []), stale = new Set(L1.stale || []);
+  const evil = new Set(L1.evil || []), rej = new Set(L1.rej || []);
   hs.forEach((g, i) => {
     const x = X(xs[i]);
     if (dead.has(i)) {                               // crashed process: no controller any more
@@ -244,8 +259,25 @@ function drawRoad(k, alpha) {
       ctx.fillText('crashed', x, yCar - carH / 2 - 6);
       return;
     }
-    drawCar(ctx, x, yCar, carW, carH, gapColor(g), String(i + 1), 'white', moving && L1.u[i] < -BRAKE_LIGHT);
-    if (stale.has(i)) {                              // using an old or estimated value this step
+    drawCar(ctx, x, yCar, carW, carH, evil.has(i) ? LIAR : gapColor(g), String(i + 1), 'white',
+            moving && L1.u[i] < -BRAKE_LIGHT);
+    ctx.font = '600 10px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'center';
+    if (evil.has(i)) {                               // malicious car: drives normally, lies in its messages
+      ctx.fillStyle = '#d7b8ff';
+      ctx.fillText('liar', x, yCar - carH / 2 - 6);
+    }
+    if (rej.has(i)) {                                // its radar check just rejected the front car's message
+      ctx.save();
+      ctx.strokeStyle = '#c9a2ff';
+      ctx.setLineDash([4, 2]);
+      ctx.lineWidth = 2;
+      roundRect(ctx, x - carW / 2 - 4, yCar - carH / 2 - 4, carW + 8, carH + 8, 6);
+      ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = '#d7b8ff';
+      ctx.fillText('ignored', x, yCar - carH / 2 - 6);
+    } else if (stale.has(i)) {                              // using an old or estimated value this step
       ctx.save();
       ctx.strokeStyle = '#ffffff';
       ctx.setLineDash([3, 2]);
@@ -359,6 +391,7 @@ $('play').onclick = () => post('toggle');
 $('reset').onclick = resetToSelection;
 $('seed').onchange = resetToSelection;
 $('scenario').onchange = resetToSelection;
+$('section').onchange = () => post('section', { value: +$('section').value });
 $('speed').onchange = () => post('speed', { value: +$('speed').value });
 $('brake').onclick = () => post('brake');
 $('auto').onclick = () => post('auto', { seed: +$('seed').value });

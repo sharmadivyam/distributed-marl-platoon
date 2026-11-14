@@ -154,29 +154,40 @@ class Simulation:
             return True
 
 
+def load_log(path):
+    cfg, frames = None, []
+    with open(path) as f:
+        for line in f:
+            rec = json.loads(line)
+            if 'config' in rec:
+                cfg = rec['config']
+            elif 'frame' in rec:
+                frames.append(rec['frame'])
+    if cfg is None or not frames:
+        raise ValueError('%s is not an MPI run log' % path)
+    return cfg, frames
+
+
 class Replay:
     """Plays back MPI runs (logs written by mpi/platoon_mpi.py) on the same dashboard.
-    Several logs are shown as stacked lanes, so runs can be compared side by side."""
+    The runs are grouped in sections (e.g. "Leader brakes", "Messages 0.5 s late"); the page shows
+    one section at a time as stacked lanes, and Play plays only that section."""
 
-    def __init__(self, hub, paths):
+    def __init__(self, hub, sections):
         self.hub = hub
         self.lock = threading.RLock()
-        self.runs = []
-        for path in paths:
-            cfg, frames = None, []
-            with open(path) as f:
-                for line in f:
-                    rec = json.loads(line)
-                    if 'config' in rec:
-                        cfg = rec['config']
-                    elif 'frame' in rec:
-                        frames.append(rec['frame'])
-            if cfg is None or not frames:
-                raise ValueError('%s is not an MPI run log' % path)
-            self.runs.append((cfg, frames))
+        self.sections = [{'title': sec['title'], 'about': sec.get('about', ''),
+                          'runs': [load_log(path) for path in sec['logs']]} for sec in sections]
+        self.speed = 1.0
+        self.select(0)
+
+    def select(self, k):
+        """Show section k, rewound to 0 s and paused."""
+        self.sec = k
+        self.runs = self.sections[k]['runs']
         self.dt = self.runs[0][0]['dt']
         self.n_ticks = max(len(frames) for _, frames in self.runs)
-        self.speed, self.playing, self.i = 1.0, False, 0
+        self.playing, self.i = False, 0
         self.hub.publish('config', self.config())
         self.hub.publish('frame', self.frame())
 
@@ -188,6 +199,10 @@ class Replay:
             lane['label'] = '%s  |  %s' % (lane['label'], cfg['network'])
             out['lanes'].append(lane)
         out['network'] = 'Replay of %d MPI run%s' % (len(self.runs), '' if len(self.runs) == 1 else 's')
+        if len(self.sections) > 1:
+            out['sections'] = [sec['title'] for sec in self.sections]
+            out['section'] = self.sec
+        out['about'] = self.sections[self.sec]['about']
         return out
 
     def frame(self):
@@ -231,6 +246,12 @@ class Replay:
                 self.hub.publish('config', self.config())
             elif cmd == 'speed':
                 self.speed = min(8.0, max(0.25, float(msg.get('value', 1.0))))
+            elif cmd == 'section':
+                k = int(msg.get('value', 0))
+                if not 0 <= k < len(self.sections):
+                    return False
+                self.select(k)
+                return True
             elif cmd != 'brake':      # the leader's actions are already in the recording
                 return False
             self.hub.publish('frame', self.frame())
@@ -314,12 +335,18 @@ def main():
     parser.add_argument('--open', action='store_true', help='open the dashboard in the default browser')
     parser.add_argument('--replay', nargs='+', metavar='LOG',
                         help='play back MPI run logs (mpi/logs/*.jsonl) instead of simulating')
+    parser.add_argument('--sections', metavar='JSON',
+                        help='play back MPI runs grouped in sections: a JSON list of '
+                             '{"title": ..., "about": ..., "logs": [...]} (see mpi/demo_sections.json)')
     args = parser.parse_args()
     logging.disable(logging.INFO)
 
     hub = Hub()
-    if args.replay:
-        sim = Replay(hub, args.replay)
+    if args.sections:
+        with open(args.sections) as f:
+            sim = Replay(hub, json.load(f))
+    elif args.replay:
+        sim = Replay(hub, [{'title': 'Replay', 'logs': args.replay}])
     else:
         print('Loading the trained policies ...', flush=True)
         sim = Simulation(hub, args.runs)

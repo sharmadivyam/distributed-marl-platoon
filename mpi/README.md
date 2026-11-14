@@ -45,13 +45,16 @@ python mpi/check_mpi.py               # proves MPI = Python, step by step
 python mpi/experiments.py             # loss/delay sweeps + scaling, graphs in mpi/results/
 ```
 
-Watch MPI runs in the browser (several runs side by side):
+Watch MPI runs in the browser. The demo page has sections (normal driving, leader brakes, late
+messages, lost messages, crashed car, malicious car); pick one at the top left and Play plays
+only that section, with every controller side by side:
 
 ```bash
-.venv/bin/python -m simulator.server --port 8766 --open --replay \
-    mpi/logs/demo_delay_last.jsonl mpi/logs/demo_delay_radar.jsonl \
-    mpi/logs/demo_crash_brake.jsonl mpi/logs/demo_ia2c_drop20.jsonl
+.venv/bin/python mpi/make_demo_sections.py            # records the 26 runs (a few minutes)
+.venv/bin/python -m simulator.server --port 8767 --open --sections mpi/demo_sections.json
 ```
+
+Any single log can also be replayed: `--replay mpi/logs/<run>.jsonl [more logs]`.
 
 ## Options
 
@@ -61,6 +64,9 @@ Watch MPI runs in the browser (several runs side by side):
 | `--drop 0.2` | each V2V message is lost with probability 20% |
 | `--delay 5` | V2V messages arrive 5 steps (0.5 s) late |
 | `--kill-car 4 --kill-at 25` | car 4's process goes silent at 25 s (crash-stop) |
+| `--byzantine-car 4 --byzantine-at 25` | car 4 keeps driving but lies in its messages from 25 s |
+| `--attack speed\|noise`, `--lie 10` | claim a false speed (+10 m/s) or send random values |
+| `--defense` | each car checks the front car's claimed speed against its own radar |
 | `--brake-at 30` | the leader brakes at 30 s |
 | `--fallback last\|radar` | when a message is missing: reuse the last value, or estimate the front car's speed from the car's own radar |
 | `--cars 16` | bigger platoon (fixed controller only); use `-np 17` |
@@ -124,6 +130,27 @@ seed moves the same way.
 
 No collisions at all under message loss, for any controller.
 
+**NeurComm under faults (10 seeds):** with 1 s delay and "last value", NeurComm drops from
+−75.8 to −199.7 and crashes on 1/10 roads; IA2C goes from −29.0 to −47.8 with no crash. With the
+radar fallback IA2C stays at −29.4, NeurComm only recovers to −83.2: the radar can replace the
+front car's speed, but not a neighbour's old hidden state. Loss barely matters for any controller.
+
+**Malicious (Byzantine) car** (seed 100000, car 4 lies from 25 s, leader brakes at 30 s;
+normal brake scores: fixed −147.7, IA2C −160.0, NeurComm −191.7):
+
+| Attack | Fixed | IA2C | NeurComm |
+|---|---|---|---|
+| claims +10 m/s | **collision 39.1 s** | −215.1 | −189.7 |
+| claims +10 m/s, radar check | −147.7 | −160.0 | −197.8 |
+| random values | **collision 38.5 s** | **collision 41.8 s** | −189.3 |
+| random values, radar check | −147.5 | −159.9 | −189.6 |
+
+The radar check (`--defense`): a car compares its front car's claimed speed with the speed its
+radar implies (how fast the gap changes) and ignores the message when they differ by more than
+2 m/s. No message was rejected in runs without a liar (no false alarms). The car in front of the
+liar cannot check it (the radar only looks forward), which is why NeurComm, whose messages also go
+forward, is not fully protected.
+
 **Crashed car process:** car 4 goes silent at 25 s, the leader brakes at 30 s: collision at
 37.0 s (fixed) and 37.9 s (IA2C). Without the crash: no collision.
 
@@ -169,3 +196,5 @@ Python. The hand-tuned controller lets the disturbance grow down a longer platoo
 | `check_mpi.py` | MPI vs Python, step by step |
 | `experiments.py` | loss and delay sweeps, scaling test, CSV + graphs in `results/` |
 | `run.sh` | the standard demo runs |
+| `make_demo_sections.py` | records the runs for the sectioned demo page (`demo_sections.json`) |
+| `train_mpi.py`, `check_train.py`, `compare_training.py` | distributed training, its exactness check, comparison |

@@ -1,3 +1,46 @@
+# Distributed MARL Platoon
+
+Our major project (Anshika Pandey, Divyam Sharma), supervised by Dr. Archit Somani.
+
+We take the paper **"Multi-agent Reinforcement Learning for Networked System Control"**
+(Chu, Chinchali and Katti, ICLR 2020), which proposes NeurComm, and run it as a real distributed
+system: every car of the platoon is its own MPI process and the cars only talk to their
+neighbours through messages. Then we break the network on purpose (lost messages, late
+messages, crashed processes) and see what happens.
+
+The code is built on the authors' PyTorch implementation:
+https://github.com/cts198859/deeprl_network (their original README is below).
+
+## What we added
+
+| Folder | What it does |
+|---|---|
+| `demo/` | reproduction runs of IA2C and NeurComm on CACC catch-up, evaluation on 50 unseen seeds, reports |
+| `simulator/` | browser simulator: watch the platoon live or replay an MPI run, with every V2V message drawn |
+| `mpi/platoon_mpi.py` | the platoon on MPI: 1 road process + 1 process per car. Controllers: no control, radar only, fixed, IA2C, NeurComm |
+| `mpi/check_mpi.py` | proves the MPI run equals the Python run at every step |
+| `mpi/experiments.py` | message loss and delay sweeps (10 seeds), scaling with 8/16/32 cars |
+| `mpi/train_mpi.py` | distributed training: each car learns in its own process, optional neighbour weight averaging |
+| `mpi/check_train.py` | proves distributed training equals the original central training (up to float rounding) |
+| `mpi/two_laptops/` | run the platoon across two laptops |
+
+See `mpi/README.md` for results and all options.
+
+## Quick start
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r demo/requirements.txt mpi4py   # tested with Python 3.9
+brew install open-mpi
+# 9 processes: the road + 8 cars, each car runs its own part of the trained NeurComm network
+mpirun --oversubscribe -np 9 .venv/bin/python mpi/platoon_mpi.py --controller neurcomm --log mpi/logs/nc.jsonl
+.venv/bin/python mpi/check_mpi.py
+bash mpi/run.sh                      # all demo runs, then the command to watch them in the browser
+```
+
+---
+
+# Original README (Chu et al.)
+
 # Networked Multi-agent RL (NMARL)
 This repo implements the state-of-the-art MARL algorithms for networked system control, with observability and communication of each agent limited to its neighborhood. For fair comparison, all algorithms are applied to A2C agents, classified into two groups: IA2C contains non-communicative policies which utilize neighborhood information only, whereas MA2C contains communicative policies with certain communication protocols.
 

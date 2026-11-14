@@ -1,0 +1,76 @@
+[
+ {
+  "title": "Normal driving, no faults",
+  "about": "Catch-up: car 1 starts 36 m behind the leader and the platoon has to close up smoothly. With only their own radar and no messages, the cars crash at 11 s.",
+  "logs": [
+   "mpi/logs/sections/normal_radar.jsonl",
+   "mpi/logs/sections/normal_fixed.jsonl",
+   "mpi/logs/sections/normal_ia2c.jsonl",
+   "mpi/logs/sections/normal_neurcomm.jsonl"
+  ]
+ },
+ {
+  "title": "Leader brakes at 30 s",
+  "about": "The leader slows from 15 to 8 m/s in about 5 s and speeds up again. Without messages the platoon has already crashed at 11 s.",
+  "logs": [
+   "mpi/logs/sections/brake_radar.jsonl",
+   "mpi/logs/sections/brake_fixed.jsonl",
+   "mpi/logs/sections/brake_ia2c.jsonl",
+   "mpi/logs/sections/brake_neurcomm.jsonl"
+  ]
+ },
+ {
+  "title": "Messages arrive 0.5 s late",
+  "about": "Every V2V message arrives 5 steps late, and each car uses the newest (old) value it has.",
+  "logs": [
+   "mpi/logs/sections/delay_fixed.jsonl",
+   "mpi/logs/sections/delay_ia2c.jsonl",
+   "mpi/logs/sections/delay_neurcomm.jsonl"
+  ]
+ },
+ {
+  "title": "Messages 0.5 s late, radar fallback",
+  "about": "Same delay, but a car estimates the front car's speed from its own radar instead of trusting an old message. NeurComm's other message parts (policy, hidden state) cannot be estimated.",
+  "logs": [
+   "mpi/logs/sections/delay_radar_fixed.jsonl",
+   "mpi/logs/sections/delay_radar_ia2c.jsonl",
+   "mpi/logs/sections/delay_radar_neurcomm.jsonl"
+  ]
+ },
+ {
+  "title": "Half of all messages lost",
+  "about": "Each V2V message is lost with probability 50%; a car reuses the last value it received.",
+  "logs": [
+   "mpi/logs/sections/drop_fixed.jsonl",
+   "mpi/logs/sections/drop_ia2c.jsonl",
+   "mpi/logs/sections/drop_neurcomm.jsonl"
+  ]
+ },
+ {
+  "title": "Car 4 crashes at 25 s, then the leader brakes",
+  "about": "Car 4's process goes silent (crash-stop). The road detects it with a timeout and the car rolls on at constant speed, so it cannot brake when the leader does.",
+  "logs": [
+   "mpi/logs/sections/crash_fixed.jsonl",
+   "mpi/logs/sections/crash_ia2c.jsonl",
+   "mpi/logs/sections/crash_neurcomm.jsonl"
+  ]
+ },
+ {
+  "title": "Car 4 is malicious, no defence",
+  "about": "From 25 s car 4 drives normally but sends random values (Byzantine fault: it keeps talking, but lies). The leader brakes at 30 s and the cars behind car 4 believe its messages.",
+  "logs": [
+   "mpi/logs/sections/liar_fixed.jsonl",
+   "mpi/logs/sections/liar_ia2c.jsonl",
+   "mpi/logs/sections/liar_neurcomm.jsonl"
+  ]
+ },
+ {
+  "title": "Car 4 is malicious, radar check on",
+  "about": "Same attack. Every car compares its front car's claimed speed with what its own radar says (how fast the gap changes) and ignores messages that disagree by more than 2 m/s.",
+  "logs": [
+   "mpi/logs/sections/liar_defense_fixed.jsonl",
+   "mpi/logs/sections/liar_defense_ia2c.jsonl",
+   "mpi/logs/sections/liar_defense_neurcomm.jsonl"
+  ]
+ }
+]
