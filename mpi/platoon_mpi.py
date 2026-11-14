@@ -1,7 +1,14 @@
 """
 The CACC platoon on MPI: every car is its own MPI process.
 
-    mpirun --oversubscribe -np 9 python mpi/platoon_mpi.py --controller ia2c   # 8 cars + the road
+    mpirun --oversubscribe -np 9 python mpi/platoon_mpi.py --controller ia2c      # 8 cars + the road
+    mpirun --oversubscribe -np 9 python mpi/platoon_mpi.py --controller neurcomm
+
+Baselines without communication: none (no control at all: every car keeps its speed, setting
+(0, 0)) and radar (each car reacts only to its own radar gap, setting (0.5, 0), no V2V messages).
+Controllers: fixed (hand-tuned, needs only the front car's speed), ia2c (each car's own trained
+network, neighbours share their 5-number observation) and neurcomm (each car runs its own part of
+the trained NeurComm network; neighbours send observation + policy + LSTM hidden state, 73 numbers).
 
 Rank 0 is the road. It moves the cars (the physics) and drives the leading vehicle.
 Rank i (1..N) is car i. It only knows its own sensor readings (speed, acceleration and radar gap,
@@ -38,8 +45,11 @@ from simulator.world import Leader  # noqa: E402
 # same values as simulator/controllers.py, repeated here so the fixed controller does not need
 # PyTorch (only IA2C cars load it); this keeps 32-car runs light
 DEFAULT_RUNS = os.path.join(REPO, 'demo', 'runs')
+# our best NeurComm (spatial discount 0.9, seed 13; the as-released global-reward one is in demo/runs)
+DEFAULT_NC_RUNS = os.path.join(REPO, 'demo', 'repro', 'nc_alpha0.9_seed13')
 RUN_DIRS = {'ia2c': 'ia2c_catchup', 'neurcomm': 'ma2c_nc_catchup'}
 FIXED_SETTING = (0.5, 0.5)
+NO_V2V = {'none': (0, 0), 'radar': (0.5, 0)}   # baselines that use no messages at all
 
 
 def read_config(run_dir):
@@ -60,7 +70,7 @@ LEADER_ID = -1        # node id of the leader in logs (it lives on the road rank
 
 def parse_args():
     p = argparse.ArgumentParser(description='CACC platoon with one MPI process per car')
-    p.add_argument('--controller', choices=['fixed', 'ia2c'], default='ia2c')
+    p.add_argument('--controller', choices=['none', 'radar', 'fixed', 'ia2c', 'neurcomm'], default='ia2c')
     p.add_argument('--seed', type=int, default=100000, help='starting position (a report test seed)')
     p.add_argument('--scenario', choices=['catchup', 'slowdown'], default='catchup')
     p.add_argument('--steps', type=int, default=600, help='0.1 s steps to simulate (600 = 60 s)')
@@ -73,22 +83,30 @@ def parse_args():
                    help='what a car uses when the front car\'s message is missing')
     p.add_argument('--timeout-ms', type=float, default=50.0,
                    help='how long a car waits for a neighbour\'s message before falling back')
+    p.add_argument('--fast-faults', action='store_true',
+                   help='for big experiments: a lost or delayed message is announced by a tiny marker, so '
+                        'receivers do not wait for the timeout (same behaviour, deterministic, much faster)')
     p.add_argument('--crash-timeout-ms', type=float, default=2000.0,
                    help='how long the road waits for a car\'s command before declaring it crashed')
     p.add_argument('--cars', type=int, default=None, help='platoon size (fixed controller only)')
     p.add_argument('--realtime', action='store_true', help='run at 10 steps per second')
-    p.add_argument('--runs', default=DEFAULT_RUNS)
+    p.add_argument('--runs', default=DEFAULT_RUNS, help='folder with the trained IA2C run')
+    p.add_argument('--nc-runs', default=DEFAULT_NC_RUNS, help='folder with the trained NeurComm run')
     p.add_argument('--log', default=None, help='JSON-lines log for the dashboard (written by rank 0)')
     return p.parse_args()
 
 
 def load_config(args):
-    run = RUN_DIRS['ia2c'] if args.controller == 'ia2c' else RUN_DIRS['neurcomm']
-    run_dir = os.path.join(args.runs, run)
+    if args.controller == 'ia2c':
+        run_dir = os.path.join(args.runs, RUN_DIRS['ia2c'])
+    elif args.controller == 'neurcomm':
+        run_dir = os.path.join(args.nc_runs, RUN_DIRS['neurcomm'])
+    else:    # fixed: only the physics settings are needed, identical in every CACC config
+        run_dir = os.path.join(args.runs, RUN_DIRS['neurcomm'])
     config = read_config(run_dir)
     if args.cars is not None:
-        if args.controller != 'fixed' and args.cars != config['ENV_CONFIG'].getint('n_vehicle'):
-            raise SystemExit('the trained IA2C policy only works with %s cars' % config['ENV_CONFIG']['n_vehicle'])
+        if args.controller in ('ia2c', 'neurcomm') and args.cars != config['ENV_CONFIG'].getint('n_vehicle'):
+            raise SystemExit('the trained policies only work with %s cars' % config['ENV_CONFIG']['n_vehicle'])
         config['ENV_CONFIG']['n_vehicle'] = str(args.cars)
     return config, run_dir
 
@@ -100,7 +118,9 @@ class V2V:
     def __init__(self, comm, rank, args):
         self.comm = comm
         self.drop, self.delay = args.drop, args.delay
+        self.fast = args.fast_faults
         self.rng = np.random.default_rng([args.seed, rank])
+        self.marked = set()   # (src, tag, t): the emulator said this tick's message is not coming
         self.queue = []       # (send_tick, dest, tag, payload) held back by --delay
         self.pending = []     # MPI requests of messages in flight
         self.newest = {}      # (src, tag) -> newest message received
@@ -114,10 +134,14 @@ class V2V:
         if self.drop > 0 and self.rng.random() < self.drop:
             self.dropped += 1
             self.lost.append([src_id, dst_id])
+            if self.fast:      # fast mode: tell the receiver at once instead of letting it time out
+                self.pending.append(self.comm.isend({'t': t, 'marker': True}, dest=dest, tag=tag))
             return
         self.sent += 1
         self.bytes += n_floats * FLOAT_BYTES
         self.queue.append((t + self.delay, dest, tag, payload))
+        if self.fast and self.delay > 0:
+            self.pending.append(self.comm.isend({'t': t, 'marker': True}, dest=dest, tag=tag))
         self.flush(t)
 
     def flush(self, t):
@@ -134,12 +158,19 @@ class V2V:
         while True:
             while self.comm.iprobe(source=src, tag=tag):
                 msg = self.comm.recv(source=src, tag=tag)
+                if msg.get('marker'):
+                    self.marked.add((src, tag, msg['t']))
+                    continue
                 old = self.newest.get((src, tag))
                 if old is None or msg['t'] >= old['t']:
                     self.newest[(src, tag)] = msg
             cur = self.newest.get((src, tag))
             if cur is not None and cur['t'] == t:
                 return cur, False
+            if (src, tag, t) in self.marked:
+                self.marked.discard((src, tag, t))
+                self.stale += 1
+                return cur, True
             if time.perf_counter() > deadline:
                 self.stale += 1
                 return cur, True
@@ -157,6 +188,41 @@ def local_state(env, v, h, u, v_lead):
     return np.array([v_state, vdiff_state, vhdiff_state, h_state, u_state])
 
 
+class NeurCommCar:
+    """Car i's own part of the trained NeurComm network: its three message encoders, its LSTM and
+    its actor head. The maths is NCMultiAgentPolicy._run_comm_layers for one agent; what the shared
+    network reads from the other agents' rows arrives here as V2V messages instead."""
+    def __init__(self, policy, i):
+        import torch
+        import torch.nn.functional as F
+        self.torch, self.F = torch, F
+        self.fc_x, self.fc_p, self.fc_m = policy.fc_x_layers[i], policy.fc_p_layers[i], policy.fc_m_layers[i]
+        self.lstm, self.actor = policy.lstm_layers[i], policy.actor_heads[i]
+        self.n_h, self.n_a = policy.n_h, policy.n_a
+        self.reset()
+
+    def reset(self):
+        self.h = self.torch.zeros(1, self.n_h)
+        self.c = self.torch.zeros(1, self.n_h)
+        self.pi = np.ones(self.n_a) / self.n_a     # fingerprint before the first step: uniform, as in the env
+
+    def message(self, own):
+        """What this car tells its neighbours at this step: observation, last policy, last hidden state."""
+        return {'s': own, 'p': np.asarray(self.pi), 'h': self.h.numpy()[0].copy()}
+
+    def act(self, own, msgs, done):
+        torch, F = self.torch, self.F
+        with torch.no_grad():
+            x = torch.from_numpy(np.concatenate([own] + [m['s'] for m in msgs])).float().unsqueeze(0)
+            p = torch.from_numpy(np.concatenate([m['p'] for m in msgs])).float().unsqueeze(0)
+            m = torch.from_numpy(np.concatenate([m['h'] for m in msgs])).float().unsqueeze(0)
+            s = torch.cat([F.relu(self.fc_x(x)), F.relu(self.fc_p(p)), F.relu(self.fc_m(m))], dim=1)
+            keep = 1.0 - torch.tensor([float(done)])
+            self.h, self.c = self.lstm(s, (self.h * keep, self.c * keep))
+            self.pi = F.softmax(self.actor(self.h), dim=1).squeeze().numpy()
+        return int(np.argmax(self.pi))
+
+
 def car_main(comm, rank, args, config, run_dir):
     i = rank - 1                              # car index 0..N-1 (car number i+1 on screen)
     n = comm.Get_size() - 1
@@ -166,8 +232,13 @@ def car_main(comm, rank, args, config, run_dir):
         from simulator.controllers import load_model          # PyTorch, only needed for IA2C
         policy = load_model(env, config, run_dir).policy[i]   # this car's own network only
         policy._reset()
+    elif args.controller == 'neurcomm':
+        from simulator.controllers import load_model
+        nc = NeurCommCar(load_model(env, config, run_dir).policy, i)   # this car's own part only
+        nc_floats = 5 + nc.n_a + nc.n_h
+        silent = {'s': np.zeros(5), 'p': np.ones(nc.n_a) / nc.n_a, 'h': np.zeros(nc.n_h)}
     else:
-        fixed_action = env.a_map.index(FIXED_SETTING)
+        fixed_action = env.a_map.index(NO_V2V.get(args.controller, FIXED_SETTING))
     v2v = V2V(comm, rank, args)
     timeout = args.timeout_ms / 1000.0
     comm.gather(MPI.Get_processor_name(), root=ROAD)   # tell the road which machine I run on
@@ -189,9 +260,12 @@ def car_main(comm, rank, args, config, run_dir):
         v, h, u = sensor['v'], sensor['h'], sensor['u']
 
         # V2V round 1: beacon (my speed) to the car behind, beacon from the car in front
-        if i < n - 1:
+        if args.controller in NO_V2V:
+            msg, stale = {'v': v}, False      # no messages; the front car's speed is not used (beta = 0)
+        elif i < n - 1:
             v2v.send(t, rank + 1, TAG_BEACON, {'t': t, 'v': v}, 1, i, i + 1)
-        msg, stale = v2v.recv(t, ROAD if i == 0 else rank - 1, TAG_BEACON, timeout)
+        if args.controller not in NO_V2V:
+            msg, stale = v2v.recv(t, ROAD if i == 0 else rank - 1, TAG_BEACON, timeout)
         if not stale:
             v_lead = msg['v']
         elif args.fallback == 'radar' and h_prev is not None:
@@ -211,6 +285,16 @@ def car_main(comm, rank, args, config, run_dir):
                 parts.append(msg['s'] if msg is not None else np.zeros(5))
             pi = policy.forward(np.concatenate(parts), done)
             action = int(np.argmax(pi))
+        elif args.controller == 'neurcomm':
+            # V2V round 2 (NeurComm): observation + last policy + last LSTM hidden state to both neighbours
+            out = dict(nc.message(own), t=t)
+            for j in neighbours:
+                v2v.send(t, j + 1, TAG_STATE, out, nc_floats, i, j)
+            msgs = []
+            for j in neighbours:
+                msg, _ = v2v.recv(t, j + 1, TAG_STATE, timeout)
+                msgs.append(msg if msg is not None else silent)
+            action = nc.act(own, msgs, done)
         else:
             action = fixed_action
         done = False
@@ -234,13 +318,21 @@ class RoadEnv(CACCEnv):
         return self.u_cmd[i]
 
 
+NC_FLOATS = 5 + 4 + 64     # NeurComm message: observation + policy over 4 actions + LSTM hidden state
+LABELS = {'none': 'No control (every car keeps its speed)', 'radar': 'Radar only, no V2V messages',
+          'fixed': 'Fixed controller', 'ia2c': 'IA2C', 'neurcomm': 'NeurComm'}
+
+
 def links_for(controller, n):
+    if controller in NO_V2V:
+        return []
     links = [[LEADER_ID, 0, 'beacon', FLOAT_BYTES]] + [[i, i + 1, 'beacon', FLOAT_BYTES] for i in range(n - 1)]
-    if controller == 'ia2c':
+    if controller in ('ia2c', 'neurcomm'):
+        kind, n_floats = ('state', 5) if controller == 'ia2c' else ('neurcomm', NC_FLOATS)
         for i in range(n):
             for j in (i - 1, i + 1):
                 if 0 <= j < n:
-                    links.append([j, i, 'state', 5 * FLOAT_BYTES])
+                    links.append([j, i, kind, n_floats * FLOAT_BYTES])
     return links
 
 
@@ -290,7 +382,7 @@ def road_main(comm, args, config):
     rewards, x_leader = [], 0.0
     totals = {'sent': 0, 'bytes': 0, 'dropped': 0, 'stale': 0}
     log = open(args.log, 'w') if args.log else None
-    label = '%s on MPI: %d car processes + 1 road process' % ('IA2C' if args.controller == 'ia2c' else 'Fixed controller', n)
+    label = '%s on MPI: %d car processes + 1 road process' % (LABELS[args.controller], n)
     faults = []
     if args.drop:
         faults.append('%d%% messages lost' % round(args.drop * 100))
@@ -308,7 +400,8 @@ def road_main(comm, args, config):
                   'n': n, 'dt': env.dt, 'h_star': env.h_star, 'v_star': env.v_star, 'h_min': env.h_min,
                   'a_map': [list(a) for a in env.a_map],
                   'network': 'MPI, ' + (', '.join(faults) if faults else 'no faults'),
-                  'lanes': [{'key': 'mpi', 'label': label, 'comm': 'state' if args.controller == 'ia2c' else 'beacon',
+                  'lanes': [{'key': 'mpi', 'label': label,
+                             'comm': {'ia2c': 'state', 'neurcomm': 'neurcomm'}.get(args.controller, 'beacon'),
                              'links': links_for(args.controller, n)}]}
 
     def frame(t, tick_stats, status, collision_t):
@@ -338,7 +431,8 @@ def road_main(comm, args, config):
         for i in range(n):
             comm.send({'t': t, 'stop': False, 'v': float(env.vs_cur[i]), 'h': float(env.hs_cur[i]),
                        'u': float(env.us_cur[i])}, dest=i + 1, tag=TAG_SENSOR)
-        v2v.send(t, 1, TAG_BEACON, {'t': t, 'v': float(env.v0s[t])}, 1, LEADER_ID, 0)   # leader's beacon
+        if args.controller not in NO_V2V:
+            v2v.send(t, 1, TAG_BEACON, {'t': t, 'v': float(env.v0s[t])}, 1, LEADER_ID, 0)   # leader's beacon
 
         stats = {'a': [0] * n, 'sent': v2v.sent, 'bytes': v2v.bytes, 'dropped': v2v.dropped,
                  'lost': list(v2v.lost), 'stale_cars': []}

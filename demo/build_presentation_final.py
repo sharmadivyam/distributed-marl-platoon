@@ -43,6 +43,10 @@ REPRO = [   # (method, setting, run folders for seeds 12, 13, 14)
      ['demo/repro/nc_alpha0.9_seed%d/ma2c_nc_catchup' % s for s in (12, 13, 14)]),
     ('NeurComm', 'spatial discount 0.9, 250k steps',
      ['demo/repro/nc_alpha0.9_250k_seed%d/ma2c_nc_catchup' % s for s in (12, 13, 14)]),
+    ('IA2C on MPI', 'each car learns alone, 60k steps',
+     ['mpi/train/independent_s%d' % s for s in (12, 13, 14)]),
+    ('IA2C on MPI', 'neighbours average LSTM weights, 60k steps',
+     ['mpi/train/consensus_s%d' % s for s in (12, 13, 14)]),
 ]
 FIXED_BASELINE = -72.7
 

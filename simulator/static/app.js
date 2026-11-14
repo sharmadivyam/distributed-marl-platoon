@@ -87,6 +87,7 @@ function fillControls(cfg) {
   seed.value = String(cfg.seed);
   $('scenario').value = cfg.scenario;
   for (const id of ['brake', 'scenario', 'seed']) $(id).disabled = !!cfg.replay;
+  $('brake').title = cfg.replay ? 'Recorded run: the leader\'s braking is part of the recording' : 'B';
   $('auto').textContent = cfg.replay ? 'Replay from start' : 'Auto demo';
   $('netpill').textContent = cfg.network ? cfg.network : 'Network: perfect delivery';
 }

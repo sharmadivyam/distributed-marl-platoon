@@ -16,6 +16,7 @@ import os
 import subprocess
 import sys
 
+import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -132,11 +133,93 @@ def scaling():
     return rows
 
 
+# ---------------------------------------------------------------- 10-seed version
+def run_quiet(controller, seed, flags, cars=8):
+    """One MPI run with deterministic fast faults; returns its summary (no printing)."""
+    tag = '_'.join('%s%s' % (k, v) for k, v in sorted(flags.items())) or 'clean'
+    log = os.path.join(LOGS, 'multi', '%s_%s_seed%d.jsonl' % (controller, tag, seed))
+    cmd = ['mpirun', '--oversubscribe', '-np', str(cars + 1), sys.executable, PROG, '--controller', controller,
+           '--seed', str(seed), '--fast-faults', '--timeout-ms', '5000', '--log', log]
+    for key, value in flags.items():
+        cmd += ['--' + key.replace('_', '-'), str(value)]
+    subprocess.run(cmd, cwd=REPO, check=True, capture_output=True)
+    with open(log) as f:
+        s = [json.loads(line)['summary'] for line in f if line.startswith('{"summary"')][0]
+    s.pop('rewards')
+    return s
+
+
+def multiseed_sweep(kind, values, fmt, seeds, workers=3):
+    from concurrent.futures import ThreadPoolExecutor
+    os.makedirs(os.path.join(LOGS, 'multi'), exist_ok=True)
+    jobs = []
+    for controller in ('fixed', 'ia2c'):
+        for fallback in ('last', 'radar'):
+            for value in values:
+                flags = {'fallback': fallback}
+                if value:
+                    flags[kind] = value
+                for seed in seeds:
+                    jobs.append((controller, fallback, value, seed, flags))
+    with ThreadPoolExecutor(workers) as pool:
+        results = list(pool.map(lambda j: (j, run_quiet(j[0], j[3], j[4])), jobs))
+    rows = []
+    for controller in ('fixed', 'ia2c'):
+        for fallback in ('last', 'radar'):
+            for value in values:
+                runs = [s for (c, fb, v, _, _), s in results if (c, fb, v) == (controller, fallback, value)]
+                rewards = np.array([r['avg_reward'] for r in runs])
+                crashes = sum(r['collision_t'] is not None for r in runs)
+                rows.append({'sweep': kind, 'controller': controller, 'fallback': fallback, 'value': value,
+                             'seeds': len(runs), 'mean_reward': round(float(rewards.mean()), 2),
+                             'std_reward': round(float(rewards.std()), 2), 'collisions': crashes})
+                print('  %-5s %-5s %s=%-4s  reward %8.1f +- %6.1f   collisions %d/%d'
+                      % (controller, fallback, kind, value, rewards.mean(), rewards.std(), crashes, len(runs)),
+                      flush=True)
+    write_csv(rows, os.path.join(OUT, '%s_sweep_%dseeds.csv' % (kind, len(seeds))))
+
+    fig, ax = plt.subplots(figsize=(7.5, 4.4))
+    for controller in ('fixed', 'ia2c'):
+        for fallback in ('last', 'radar'):
+            pts = [r for r in rows if r['controller'] == controller and r['fallback'] == fallback]
+            xs = [fmt(r['value']) for r in pts]
+            ys = [r['mean_reward'] for r in pts]
+            ax.errorbar(xs, ys, yerr=[r['std_reward'] for r in pts], marker='o', capsize=3, linewidth=2,
+                        color=COLORS[(controller, fallback)],
+                        label='%s, fallback: %s' % (LABELS[controller], 'radar estimate' if fallback == 'radar' else 'last value'))
+            for r, x, y in zip(pts, xs, ys):
+                if r['collisions']:
+                    ax.annotate('%d/%d crashed' % (r['collisions'], r['seeds']), (x, y), textcoords='offset points',
+                                xytext=(6, -12), fontsize=7.5, color='#c0392b')
+    if kind == 'delay':
+        ax.set_yscale('symlog', linthresh=10)
+        ticks = [-20, -30, -50, -100, -200, -500, -1000]
+        ax.set_yticks(ticks)
+        ax.set_yticklabels([str(t) for t in ticks])
+    style(ax, 'V2V messages lost [%]' if kind == 'drop' else 'V2V message delay [s]',
+          'avg reward per step (mean +- std over %d seeds)' % len(seeds),
+          'Platoon under %s, %d test seeds' % ('message loss' if kind == 'drop' else 'message delay', len(seeds)))
+    ax.legend(frameon=False, fontsize=8, loc='lower left')
+    fig.tight_layout()
+    fig.savefig(os.path.join(OUT, '%s_sweep_%dseeds.png' % (kind, len(seeds))), dpi=160)
+    plt.close(fig)
+    return rows
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--only', choices=['drop', 'delay', 'scaling'], default=None)
     p.add_argument('--plot-only', action='store_true', help='redraw the sweep graphs from the saved CSVs')
+    p.add_argument('--test-seeds', type=int, default=0,
+                   help='run the loss and delay sweeps on this many test seeds (fast fault mode, in parallel)')
     args = p.parse_args()
+    if args.test_seeds:
+        seeds = [100000 + 10 * k for k in range(args.test_seeds)]
+        print('1) message loss sweep, %d seeds' % len(seeds))
+        multiseed_sweep('drop', [0, 0.1, 0.2, 0.3, 0.5], lambda v: 100 * v, seeds)
+        print('2) delay sweep, %d seeds' % len(seeds))
+        multiseed_sweep('delay', [0, 1, 2, 3, 5, 10], lambda v: v * 0.1, seeds)
+        return
     if args.plot_only:
         for kind, fmt in (('drop', lambda v: 100 * v), ('delay', lambda v: v * 0.1)):
             with open(os.path.join(OUT, '%s_sweep.csv' % kind)) as f:

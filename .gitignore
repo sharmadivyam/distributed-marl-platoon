@@ -5,7 +5,6 @@ __pycache__/
 .DS_Store
 
 # bulky experiment outputs (regenerate with the scripts in demo/ and mpi/)
-demo/repro/
 demo/runs_*/
 demo/videos/
 demo/results_*/
@@ -17,3 +16,14 @@ demo/runs/**
 !demo/runs/**/
 !demo/runs/*/data/*.ini
 !demo/runs/*/model/best/*.pt
+
+# from demo/repro and mpi/train keep configs + learning curves, and the NeurComm model MPI uses
+demo/repro/**
+!demo/repro/**/
+!demo/repro/*/*/data/*.ini
+!demo/repro/*/*/data/train_reward.csv
+!demo/repro/nc_alpha0.9_seed13/ma2c_nc_catchup/model/best/*.pt
+mpi/train/**
+!mpi/train/**/
+!mpi/train/**/data/*.ini
+!mpi/train/**/data/train_log.jsonl

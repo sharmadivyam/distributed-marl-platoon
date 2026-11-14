@@ -217,6 +217,8 @@ class Replay:
     def command(self, msg):
         cmd = msg.get('cmd')
         with self.lock:
+            if cmd in ('play', 'toggle') and not self.playing and self.i >= self.n_ticks - 1:
+                self.i = 0            # at the end: Play starts the replay again from 0 s
             if cmd == 'play':
                 self.playing = True
             elif cmd == 'pause':

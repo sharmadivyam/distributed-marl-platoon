@@ -14,10 +14,12 @@ import numpy as np
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, 'mpi'))
 logging.disable(logging.INFO)
 
 from simulator.check import lane_rollout  # noqa: E402
 from simulator.controllers import build_lane  # noqa: E402
+from platoon_mpi import DEFAULT_NC_RUNS  # noqa: E402
 
 SEED = 100000
 LOG_DIR = os.path.join(REPO, 'mpi', 'logs')
@@ -36,12 +38,13 @@ def mpi_rewards(controller):
 def main():
     os.makedirs(LOG_DIR, exist_ok=True)
     ok = True
-    for controller in ('fixed', 'ia2c'):
-        ref, _ = lane_rollout(build_lane(controller), 600, seed=SEED)
+    for controller in ('fixed', 'ia2c', 'neurcomm'):
+        lane = build_lane(controller, DEFAULT_NC_RUNS) if controller == 'neurcomm' else build_lane(controller)
+        ref, _ = lane_rollout(lane, 600, seed=SEED)
         got, s = mpi_rewards(controller)
         same = len(ref) == len(got) and np.array_equal(ref, got)
         ok &= same
-        print('%-6s %s  python %.2f  mpi %.2f  (%d processes, %d V2V messages)'
+        print('%-8s %s  python %.2f  mpi %.2f  (%d processes, %d V2V messages)'
               % (controller, 'IDENTICAL at all %d steps' % len(ref) if same else 'DIFFERENT',
                  ref.mean(), got.mean(), s['processes'], s['msgs_sent']))
     print('->', 'MPI matches Python exactly' if ok else 'MISMATCH')

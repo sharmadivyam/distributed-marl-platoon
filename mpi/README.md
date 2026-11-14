@@ -11,6 +11,17 @@ rank 2  = car 2   │  each car: gets its own sensor readings from the road,
 rank 8  = car 8  ─┘  runs ITS OWN trained policy, sends back an acceleration command
 ```
 
+Three controllers:
+
+| `--controller` | What each car process runs | What neighbours send each other every 0.1 s |
+|---|---|---|
+| `fixed` | hand-tuned OVM setting | only the front car's speed (1 number) |
+| `ia2c` | its own trained IA2C network | + its observation (5 numbers) |
+| `neurcomm` | its own part of the trained NeurComm network (encoders, LSTM, actor head) | + observation, last policy and LSTM hidden state (5 + 4 + 64 = 73 numbers) |
+
+NeurComm uses our best NeurComm model (spatial discount 0.9, seed 13, in `demo/repro/`); pick
+another with `--nc-runs`. On seed 100000 it sends 2.47 MB in 60 s, IA2C 0.19 MB (13x less).
+
 Training stays in Python/PyTorch (as before). MPI runs the **trained** policies, which is how a
 learned controller would be deployed on real cars: train once, run distributed.
 
@@ -27,6 +38,7 @@ brew install open-mpi                 # the MPI library (Open MPI 5)
 # 9 processes: 8 cars + the road
 mpirun --oversubscribe -np 9 .venv/bin/python mpi/platoon_mpi.py --controller ia2c
 mpirun --oversubscribe -np 9 .venv/bin/python mpi/platoon_mpi.py --controller fixed
+mpirun --oversubscribe -np 9 .venv/bin/python mpi/platoon_mpi.py --controller neurcomm
 
 bash mpi/run.sh                       # the standard demo runs (writes mpi/logs/demo_*.jsonl)
 python mpi/check_mpi.py               # proves MPI = Python, step by step
@@ -72,7 +84,8 @@ Watch MPI runs in the browser (several runs side by side):
 
 ## Results (seed 100000; graphs and CSVs in `results/`)
 
-**Correctness:** with no faults, MPI = Python at all 600 steps (IA2C −22.96, fixed −44.51).
+**Correctness:** with no faults, MPI = Python at all 600 steps (IA2C −22.96, fixed −44.51,
+NeurComm −60.25).
 
 **Message loss** (`results/drop_sweep.png`), avg reward per step:
 
@@ -90,6 +103,26 @@ Watch MPI runs in the browser (several runs side by side):
 | 0.3 s | −107.5 | −47.3 | −26.8 | −23.3 |
 | 0.5 s | **collision at 18.7 s** | −47.3 | −29.8 | −23.3 |
 | 1.0 s | **collision at 15.9 s** | −47.3 | −38.8 | −23.3 |
+
+**Same sweeps on 10 test seeds** (100000 to 100090; `python mpi/experiments.py --test-seeds 10`,
+graphs `results/{drop,delay}_sweep_10seeds.png`), mean ± std over the 10 seeds, and how many of
+the 10 runs ended in a collision. The ± is large because some roads are harder than others; every
+seed moves the same way.
+
+| Lost | Fixed, last value | Fixed, radar | IA2C, last value | IA2C, radar |
+|---|---|---|---|---|
+| 0% | −56.6 ± 35.0 | −56.6 ± 35.0 | −29.0 ± 17.6 | −29.0 ± 17.6 |
+| 20% | −60.5 ± 37.6 | −57.3 ± 35.4 | −29.4 ± 17.8 | −29.1 ± 17.6 |
+| 50% | −76.1 ± 48.4 | −58.4 ± 36.1 | −31.1 ± 18.7 | −29.2 ± 17.7 |
+
+| Delay | Fixed, last value | Fixed, radar | IA2C, last value | IA2C, radar |
+|---|---|---|---|---|
+| 0 s | −56.6, 0/10 crashed | −56.6, 0/10 | −29.0, 0/10 | −29.0, 0/10 |
+| 0.3 s | −180.5, **2/10 crashed** | −60.0, 0/10 | −33.5, 0/10 | −29.4, 0/10 |
+| 0.5 s | −341.8, **7/10 crashed** | −60.0, 0/10 | −37.1, 0/10 | −29.4, 0/10 |
+| 1.0 s | −488.4, **10/10 crashed** | −60.0, 0/10 | −47.8, 0/10 | −29.4, 0/10 |
+
+No collisions at all under message loss, for any controller.
 
 **Crashed car process:** car 4 goes silent at 25 s, the leader brakes at 30 s: collision at
 37.0 s (fixed) and 37.9 s (IA2C). Without the crash: no collision.
