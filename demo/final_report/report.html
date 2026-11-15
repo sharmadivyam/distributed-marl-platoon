@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DistributedRL_Archit</title>
+<style>
+:root {
+  --bg: #fbfaf7; --paper: #ffffff; --ink: #1d1d1b; --soft: #55534e; --line: #e4e1da;
+  --accent: #2a6fc9; --accent-soft: #eaf1fb; --warn: #b5482b; --warn-soft: #fbeee9;
+  --good: #23824f; --good-soft: #e8f5ee; --code: #f3f1ec;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161616; --paper: #1e1e1e; --ink: #ecebe7; --soft: #b0ada6; --line: #34322e;
+    --accent: #7fb0f0; --accent-soft: #1d2a3b; --warn: #f0957a; --warn-soft: #3a231c;
+    --good: #6fd19c; --good-soft: #17301f; --code: #2a2926;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 17px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+main { max-width: 900px; margin: 0 auto; padding: 32px 16px 80px; }
+header.title { padding: 28px 0 18px; border-bottom: 2px solid var(--ink); margin-bottom: 28px; }
+header.title h1 { font-size: 34px; line-height: 1.2; margin: 0 0 6px; letter-spacing: -0.01em; }
+header.title .sub { font-size: 19px; color: var(--soft); margin: 0 0 18px; }
+.meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 6px 24px; font-size: 15px; }
+.meta b { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--soft); font-weight: 600; }
+h2 { font-size: 26px; margin: 56px 0 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+h2 .step { display: block; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); margin-bottom: 2px; }
+h3 { font-size: 19px; margin: 30px 0 6px; }
+p { margin: 10px 0; }
+a { color: var(--accent); }
+code { background: var(--code); padding: 1px 5px; border-radius: 4px; font-size: 0.88em; }
+pre { background: var(--code); padding: 14px 16px; border-radius: 8px; overflow-x: auto; font-size: 13.5px; line-height: 1.5; }
+figure { margin: 22px 0; }
+figure img { width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; background: #fff; display: block; }
+figcaption { font-size: 14.5px; color: var(--soft); margin-top: 8px; }
+.table-wrap { overflow-x: auto; margin: 16px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; background: var(--paper); }
+th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+th { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--soft); border-bottom: 2px solid var(--line); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.hl td { background: var(--accent-soft); }
+.bad { color: var(--warn); font-weight: 600; }
+.ok { color: var(--good); font-weight: 600; }
+.box { border-radius: 10px; padding: 14px 18px; margin: 18px 0; border: 1px solid var(--line); background: var(--paper); }
+.box.key { border-left: 5px solid var(--accent); background: var(--accent-soft); }
+.box.warn { border-left: 5px solid var(--warn); background: var(--warn-soft); }
+.box.good { border-left: 5px solid var(--good); background: var(--good-soft); }
+.box p:first-child { margin-top: 0; } .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+.box b.lead { display: block; margin-bottom: 4px; }
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin: 18px 0; }
+.summary .card { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.summary .big { font-size: 26px; font-weight: 700; line-height: 1.2; }
+.summary .card p { margin: 4px 0 0; font-size: 15px; color: var(--soft); }
+nav.toc { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 14px 20px; margin: 22px 0; font-size: 15.5px; }
+nav.toc ol { margin: 6px 0 0; padding-left: 22px; }
+dl.words { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 15.5px; }
+dl.words dt { font-weight: 600; } dl.words dd { margin: 0; }
+ol.steps li, ul li { margin: 4px 0; }
+.small { font-size: 14px; color: var(--soft); }
+@media (max-width: 600px) {
+  body { font-size: 16px; }
+  header.title h1 { font-size: 27px; }
+  h2 { font-size: 22px; }
+  dl.words { grid-template-columns: 1fr; }
+  dl.words dd { margin-bottom: 8px; }
+}
+@media print {
+  body { background: #fff; font-size: 12pt; }
+  main { max-width: none; padding: 0; }
+  h2 { break-before: page; }
+  figure, table, .box { break-inside: avoid; }
+  a { color: inherit; text-decoration: none; }
+}
+</style>
+</head>
+<body>
+<main>
+
+<header class="title">
+  <h1>Distributed Multi-Agent RL for Vehicle Platoons</h1>
+  <p class="sub">Taking NeurComm from a single Python process to a real message-passing system, and then breaking the network on purpose</p>
+  <div class="meta">
+    <div><b>Students</b>Anshika Pandey (2310110416)<br>Divyam Sharma (2310110109)</div>
+    <div><b>Supervisor</b>Dr. Archit Somani<br>Department of CSE, School of Engineering</div>
+    <div><b>Report</b>Major Project, end-term<br>November 2026</div>
+    <div><b>Code</b><a href="https://github.com/sharmadivyam/distributed-marl-platoon">github.com/sharmadivyam/distributed-marl-platoon</a></div>
+  </div>
+</header>
+
+<h2 style="border-top:0;margin-top:0">In short</h2>
+<p>We picked the ICLR 2020 paper <i>"Multi-agent Reinforcement Learning for Networked System Control"</i> by Chu, Chinchali and Katti. It proposes <b>NeurComm</b>, a way for agents in a network to learn what to tell their neighbours. We used the paper's car platoon task: 8 cars following a leader, where every car is its own learning agent.</p>
+<p>Our project had two halves. First we tried to reproduce the paper's results. Then, since this is a distributed systems project, we turned the whole thing into a real distributed system: <b>every car runs as its own MPI process</b> and cars only know what their neighbours send them. Once that worked, we started breaking it: lost messages, late messages, crashed processes and finally a car that lies.</p>
+
+<div class="summary">
+  <div class="card"><div class="big">Partly</div><p>reproduced the paper. IA2C learns good controllers on some seeds, NeurComm never beat the simple baseline in our runs.</p></div>
+  <div class="card"><div class="big">Identical</div><p>results on MPI and in plain Python, step by step, for all controllers. Distributed training also matches the original trainer.</p></div>
+  <div class="card"><div class="big">11.1 s</div><p>until the platoon crashes when cars use only their own radar and send no messages. Communication is not optional here.</p></div>
+  <div class="card"><div class="big">10 / 10</div><p>roads crash with 1 s old messages for the hand-tuned controller. A local radar fallback fixes all of them.</p></div>
+  <div class="card"><div class="big">13&times;</div><p>more data per second for NeurComm than IA2C, and NeurComm suffers most when messages arrive late.</p></div>
+  <div class="card"><div class="big">0 crashes</div><p>in 180 runs with a lying car once cars check messages against their own radar. Without the check, one liar crashed every road.</p></div>
+</div>
+
+<nav class="toc">
+  <b>What is in this report</b>
+  <ol>
+    <li><a href="#problem">The problem and the paper</a></li>
+    <li><a href="#repro">Step 1: reproducing the paper</a></li>
+    <li><a href="#sim">Step 2: making it visible</a></li>
+    <li><a href="#mpi">Step 3: one MPI process per car</a></li>
+    <li><a href="#faults">Step 4: breaking the network</a></li>
+    <li><a href="#training">Step 5: training on MPI</a></li>
+    <li><a href="#byzantine">Step 6: a car that lies (our own idea)</a></li>
+    <li><a href="#learned">What we learned</a></li>
+    <li><a href="#next">What is left and future work</a></li>
+    <li><a href="#run">How to run everything</a></li>
+  </ol>
+</nav>
+
+<div class="box">
+<b class="lead">A few words we use a lot</b>
+<dl class="words">
+  <dt>Platoon</dt><dd>A line of cars driving close together behind a leader, like a road train.</dd>
+  <dt>Gap (headway)</dt><dd>Distance to the car in front. The target is 20 m at 15 m/s. Below 1 m counts as a crash.</dd>
+  <dt>Reward</dt><dd>A penalty score per 0.1 s step for gap errors, speed errors and harsh acceleration. It is always negative; <b>closer to 0 is better</b>.</dd>
+  <dt>Seed</dt><dd>A number that fixes the random parts (starting positions, training randomness). Different seeds = different roads or different training runs.</dd>
+  <dt>V2V</dt><dd>Vehicle-to-vehicle messages, i.e. cars talking to each other by radio.</dd>
+  <dt>MPI rank</dt><dd>One process in an MPI program. Rank 0 is our road, ranks 1 to 8 are the cars.</dd>
+  <dt>Byzantine fault</dt><dd>A node that keeps running and talking, but sends wrong information (on purpose or not). Harder to handle than a node that just stops.</dd>
+</dl>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="problem"><span class="step">Background</span>The problem and the paper</h2>
+<p>In the paper's CACC task (cooperative adaptive cruise control), 8 cars follow a leading vehicle. Each car wants to keep a 20 m gap at 15 m/s, drive smoothly and never crash. In the <b>catch-up</b> scenario we used, car 1 starts too far behind the leader (36 m on our test road) and the whole platoon has to close up without the cars behind overreacting.</p>
+<figure><img src="figures/fig_problem.png" alt="Eight cars behind a leader with links between neighbours">
+<figcaption>The task. Each car is one learning agent and can only talk to the car in front and the car behind.</figcaption></figure>
+
+<p>The learning part is simpler than it sounds. Every car uses the same "driver formula" (the optimal velocity model):</p>
+<p style="text-align:center"><b>acceleration = &alpha; &times; (speed I should have for my gap &minus; my speed) + &beta; &times; (front car's speed &minus; my speed)</b></p>
+<p>The &alpha; part only needs the car's own radar. The &beta; part needs the front car's speed, which a car cannot measure, so <b>it has to come in a message</b>. Every 0.1 s, each agent picks one of four knob settings for (&alpha;, &beta;): (0, 0), (0.5, 0), (0, 0.5) or (0.5, 0.5). So the RL agents do not steer directly, they choose how to drive.</p>
+
+<p>We compare four ways of choosing:</p>
+<div class="table-wrap"><table>
+<tr><th>Controller</th><th>How it picks the setting</th><th>What neighbours send it</th></tr>
+<tr><td><b>Radar only</b></td><td>always (0.5, 0), reacts to its own gap only</td><td>nothing</td></tr>
+<tr><td><b>Fixed</b></td><td>always (0.5, 0.5), hand-tuned</td><td>front car's speed (1 number)</td></tr>
+<tr><td><b>IA2C</b></td><td>its own trained neural network</td><td>+ neighbours' observations (5 numbers each)</td></tr>
+<tr><td><b>NeurComm</b></td><td>its own part of a trained network that also reads neighbours' "thoughts"</td><td>+ observation, last decision and LSTM hidden state (5 + 4 + 64 = 73 numbers)</td></tr>
+</table></div>
+<figure><img src="figures/fig_ia2c_vs_neurcomm.png" alt="IA2C agents observe neighbours, NeurComm agents send learned messages">
+<figcaption>IA2C vs NeurComm. NeurComm's idea is that agents share their internal state, so information can travel down the platoon hop by hop.</figcaption></figure>
+
+<!-- ===================================================================== -->
+<h2 id="repro"><span class="step">Step 1</span>Reproducing the paper</h2>
+<p>We started from the authors' own PyTorch code (<a href="https://github.com/cts198859/deeprl_network">cts198859/deeprl_network</a>), fixed what did not run on a current Mac, and trained IA2C and NeurComm on catch-up for 60,000 steps per run.</p>
+<p>To score a trained model fairly we always do the same thing: take the version with the best validation score during training (mean of the last 5 test episodes), then run it with deterministic actions on <b>50 roads it has never seen</b> (seeds 100000, 100010, ..., 100490) and average the reward per step. The hand-tuned fixed controller scores <b>&minus;72.7</b> on the same roads; that is the bar to beat.</p>
+
+<div class="table-wrap"><table>
+<tr><th>Method</th><th class="num">Seed 12</th><th class="num">Seed 13</th><th class="num">Seed 14</th><th class="num">Mean</th></tr>
+<tr><td>Fixed controller (no learning)</td><td class="num"></td><td class="num"></td><td class="num"></td><td class="num"><b>&minus;72.7</b></td></tr>
+<tr class="hl"><td>IA2C, 60k steps</td><td class="num ok">&minus;37.2</td><td class="num">&minus;94.5</td><td class="num">&minus;374.6</td><td class="num">&minus;168.8</td></tr>
+<tr><td>NeurComm as released (one global reward)</td><td class="num">&minus;422.3</td><td class="num">&minus;392.4</td><td class="num">&minus;392.4</td><td class="num">&minus;402.3</td></tr>
+<tr><td>NeurComm with spatial discount 0.9</td><td class="num">&minus;176.8</td><td class="num">&minus;94.3</td><td class="num">&minus;392.4</td><td class="num">&minus;221.1</td></tr>
+<tr><td>NeurComm, spatial discount 0.9, 250k steps</td><td class="num">&minus;176.8</td><td class="num">&minus;94.3</td><td class="num">&minus;392.4</td><td class="num">&minus;221.1</td></tr>
+</table></div>
+<p>Later we trained IA2C on three more seeds (15, 16, 17) and got &minus;70.1, &minus;431.9 and &minus;34.2. So over 6 seeds IA2C beats the fixed controller <b>3 times out of 6</b> (median &minus;82.3), and when it works it is really good: seed 12 is twice as good as the fixed controller.</p>
+
+<h3>What we tried for NeurComm</h3>
+<ul>
+  <li><b>Spatial discount.</b> The released configs give every agent the same global reward (<code>coop_gamma = -1</code>). The paper's method weights rewards of nearby cars more. Turning it on (0.9) helped a lot: &minus;402 to &minus;221. Seed 13 got close to the baseline (&minus;94.3).</li>
+  <li><b>Training 4&times; longer (250k steps).</b> It did not change anything. In all three seeds the best version was found before 60k steps (at 41k, 38k and 29k), so the final scores are exactly the same. The figure shows why: the typical score stays flat and the share of good episodes even goes down over time. Training is unstable, not too short.</li>
+</ul>
+<figure><img src="figures/fig_nc_250k.png" alt="NeurComm learning curves over 250k steps stay flat">
+<figcaption>NeurComm trained for 250k steps. Good versions show up early by chance, then training drifts away from them. No seed ever gets near the fixed controller line.</figcaption></figure>
+
+<div class="box warn">
+<b class="lead">Verdict on the reproduction: partly reproduced</b>
+<p>The setup works and IA2C learns good controllers on some seeds. NeurComm, the paper's main method, did not beat the hand-tuned controller in any of our runs. Our best guesses why: the paper's numbers come from the authors' older TensorFlow code and we use their PyTorch port; the released configs have the spatial discount turned off; and training is very sensitive to the seed (Step 5 shows just how sensitive). We did not keep tuning, because the rest of the project did not depend on NeurComm being the best controller, only on having trained models to run distributed.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="sim"><span class="step">Step 2</span>Making it visible</h2>
+<p>Numbers in a table do not show what a platoon actually does, and Dr. Somani asked us to show it. So we built a browser simulator (Python standard library server, Server-Sent Events, HTML canvas). It can run the trained policies live or replay a recorded MPI run. Every V2V message is drawn as a dot moving between cars, so you can literally watch who talks to whom.</p>
+<p>The final demo page has 9 sections, one situation each (normal driving, leader brakes, late messages, radar fallback, lost messages, crashed car, malicious car without defence, with radar check, with gossip). Picking a section shows all controllers side by side and Play plays only that section.</p>
+<figure><img src="figures/shot_normal.png" alt="Simulator with four platoons, the radar-only one has crashed">
+<figcaption>Section 1 at 11.5 s. Top: radar only (no messages) has already crashed at 11.1 s. Then fixed, IA2C and NeurComm. On the right of each row is every car's gap over the last 30 s; flat lines on the dashed 20 m line are good, the pink zone is dangerous. Orange dots are shared observations, the bigger ones are NeurComm messages.</figcaption></figure>
+<p class="small">How to read the page: car colour shows the gap error (green within 2 m, amber 2 to 6 m, red more than 6 m off or closer than 10 m); a red bar at the back means braking hard; a dashed outline means the car is using an old or estimated value; a grey &times; car is a crashed process; purple is a lying car.</p>
+
+<!-- ===================================================================== -->
+<h2 id="mpi"><span class="step">Step 3</span>One MPI process per car</h2>
+<p>This is where the project becomes a distributed system. We wrote <code>mpi/platoon_mpi.py</code> with mpi4py on Open MPI 5. With 8 cars it runs as <b>9 separate processes</b>:</p>
+<ul>
+  <li><b>Rank 0, the road.</b> It plays the physical world: it moves all cars, drives the leader and sends each car only its own sensor readings (speed, acceleration, radar gap). It is not a controller and never tells a car what to do.</li>
+  <li><b>Ranks 1 to 8, the cars.</b> Each loads <b>only its own part</b> of the trained policy and talks only to its neighbours with point-to-point messages (<code>isend</code>, <code>iprobe</code>, <code>recv</code>).</li>
+</ul>
+<figure><img src="figures/fig_mpi_architecture.png" alt="Rank 0 road process connected to 8 car processes, cars linked to neighbours">
+<figcaption>Process layout. Grey dashed lines: sensors down, acceleration command up. Orange: V2V messages between neighbouring car processes only. The dashed boxes show how the ranks split over two laptops; that setup is ready (see <a href="#next">What is left</a>).</figcaption></figure>
+
+<h3>One 0.1 s step</h3>
+<ol class="steps">
+  <li>The road sends each car its own sensor readings.</li>
+  <li><b>V2V round 1:</b> each car sends its speed to the car behind. The leader's speed comes from the road.</li>
+  <li>Each car waits (up to a timeout) for the front car's message. If it is missing, it uses a fallback.</li>
+  <li><b>V2V round 2</b> (IA2C and NeurComm): each car sends its message to both neighbours. For NeurComm this is the real NeurComm message with the hidden state inside.</li>
+  <li>Each car runs its own network, turns the chosen setting into an acceleration and sends it to the road.</li>
+  <li>The road waits for every command (a car that does not answer in time is marked as crashed), moves all cars and logs the step.</li>
+</ol>
+<p>NeurComm took the most care. In the authors' code it is one big network for all agents. We cut it up so each car process holds its own encoders, LSTM and action head, and what the big network used to read from other agents' rows now arrives as real messages.</p>
+
+<h3>Is it still the same algorithm?</h3>
+<p>Yes, exactly. <code>mpi/check_mpi.py</code> runs each controller on MPI and in plain Python on the same road and compares the reward at every one of the 600 steps:</p>
+<div class="table-wrap"><table>
+<tr><th>Controller</th><th class="num">Python</th><th class="num">MPI (9 processes)</th><th>Result</th><th class="num">V2V messages in 60 s</th><th class="num">Data in 60 s</th></tr>
+<tr><td>Fixed</td><td class="num">&minus;44.51</td><td class="num">&minus;44.51</td><td class="ok">identical at all 600 steps</td><td class="num">4,800</td><td class="num">19 KB</td></tr>
+<tr><td>IA2C</td><td class="num">&minus;22.96</td><td class="num">&minus;22.96</td><td class="ok">identical at all 600 steps</td><td class="num">13,200</td><td class="num">187 KB</td></tr>
+<tr><td>NeurComm</td><td class="num">&minus;60.25</td><td class="num">&minus;60.25</td><td class="ok">identical at all 600 steps</td><td class="num">13,200</td><td class="num">2,472 KB</td></tr>
+</table></div>
+<p>NeurComm sends the same number of messages as IA2C but <b>13&times; more data</b>, because every message carries the 64-number hidden state.</p>
+
+<h3>Does communication actually matter?</h3>
+<p>We added the <b>radar only</b> controller to answer this. It uses the same formula but drops the &beta; part, so it needs no messages at all. On our test road the platoon <b>crashes after 11.1 s</b>, with no braking and no faults. Each car only notices the car ahead slowing once the gap has already shrunk, so it brakes late and harder; the car behind sees an even bigger change, and the wave grows car by car until two cars touch (string instability). One number per step from the front car is enough to stop this. That was the clearest proof for us that in this system <b>communication is not optional</b>.</p>
+
+<h3>Scaling</h3>
+<p>With the fixed controller we ran 8, 16 and 32 cars (9, 17 and 33 processes, best of 3 runs). Time per 0.1 s step grows about linearly and stays far below the 100 ms real-time budget.</p>
+<div class="table-wrap"><table>
+<tr><th class="num">Cars</th><th class="num">MPI processes</th><th class="num">Time per step</th><th class="num">V2V messages per step</th></tr>
+<tr><td class="num">8</td><td class="num">9</td><td class="num">0.8 ms</td><td class="num">8</td></tr>
+<tr><td class="num">16</td><td class="num">17</td><td class="num">1.3 ms</td><td class="num">16</td></tr>
+<tr><td class="num">32</td><td class="num">33</td><td class="num">2.1 ms</td><td class="num">32</td></tr>
+</table></div>
+<p>The 16 and 32 car runs end in collisions (at 44.1 s and 33.8 s), exactly like plain Python. That is physics: the fixed controller cannot stop a disturbance from growing down a long platoon. It is not an MPI problem.</p>
+
+<!-- ===================================================================== -->
+<h2 id="faults"><span class="step">Step 4</span>Breaking the network</h2>
+<p>A real V2V network loses messages, delays them and has cars that fail. We added fault injection to the MPI layer and ran every setting on <b>10 test roads</b> (seeds 100000 to 100090) for all three controllers. When a car's message from its front car is missing, it can either <b>reuse the last value</b> it received or <b>estimate the front car's speed from its own radar</b> (how fast the gap is changing: v&#770; = my speed + &Delta;gap / &Delta;t).</p>
+<p class="small">These 10 roads are a different set from the 50 roads in Step 1, so the absolute numbers differ a bit (the fixed controller scores &minus;56.6 here).</p>
+
+<h3>Lost messages barely matter</h3>
+<figure><img src="figures/drop_sweep_10seeds.png" alt="Reward against share of lost messages, almost flat">
+<figcaption>Message loss on 10 roads. Left: reuse the last value. Right: radar estimate. No run crashed.</figcaption></figure>
+<p>Even with half of all messages lost, nothing crashes. With "last value", fixed goes from &minus;56.6 to &minus;76.1, IA2C from &minus;29.0 to &minus;31.1, NeurComm from &minus;75.8 to &minus;84.8. With the radar estimate all three are almost unchanged. A lost message is followed 0.1 s later by a fresh one, so the damage is small.</p>
+
+<h3>Late messages are dangerous</h3>
+<figure><img src="figures/delay_sweep_10seeds.png" alt="Reward against message delay, fixed controller crashes">
+<figcaption>Message delay on 10 roads (note the log scale). With old values the fixed controller crashes on 2/10 roads at 0.3 s, 7/10 at 0.5 s and 10/10 at 1 s. With the radar estimate nobody crashes.</figcaption></figure>
+<div class="table-wrap"><table>
+<tr><th>Delay</th><th class="num">Fixed, last value</th><th class="num">Fixed, radar</th><th class="num">IA2C, last value</th><th class="num">IA2C, radar</th><th class="num">NeurComm, last value</th><th class="num">NeurComm, radar</th></tr>
+<tr><td>0 s</td><td class="num">&minus;56.6</td><td class="num">&minus;56.6</td><td class="num">&minus;29.0</td><td class="num">&minus;29.0</td><td class="num">&minus;75.8</td><td class="num">&minus;75.8</td></tr>
+<tr><td>0.3 s</td><td class="num bad">&minus;180.5, 2/10 crash</td><td class="num">&minus;60.0</td><td class="num">&minus;33.5</td><td class="num">&minus;29.4</td><td class="num">&minus;98.9</td><td class="num">&minus;82.4</td></tr>
+<tr><td>0.5 s</td><td class="num bad">&minus;341.8, 7/10 crash</td><td class="num">&minus;60.0</td><td class="num">&minus;37.1</td><td class="num">&minus;29.4</td><td class="num">&minus;112.1</td><td class="num">&minus;82.8</td></tr>
+<tr><td>1.0 s</td><td class="num bad">&minus;488.4, 10/10 crash</td><td class="num">&minus;60.0</td><td class="num">&minus;47.8</td><td class="num">&minus;29.4</td><td class="num bad">&minus;199.7, 1/10 crash</td><td class="num">&minus;83.2</td></tr>
+</table></div>
+<figure><img src="figures/shot_delay.png" alt="Simulator: fixed controller crashed with 0.5 s late messages">
+<figcaption>Messages 0.5 s late, at 19.1 s: the fixed controller has crashed (18.7 s); IA2C and NeurComm are still driving.</figcaption></figure>
+<div class="box key">
+<b class="lead">What this means</b>
+<ul>
+  <li><b>Delay is much worse than loss.</b> An old value looks like a valid value, so the car acts on wrong information without knowing it.</li>
+  <li><b>Local sensing is the best fallback.</b> Trusting your own radar instead of an old message removes every crash and keeps IA2C at its normal score.</li>
+  <li><b>More communication means more fragility.</b> NeurComm gets 2.6&times; worse at 1 s delay (IA2C 1.65&times;) and the radar fallback only helps it partly (&minus;83.2 instead of &minus;75.8). The radar can replace the front car's speed, but nobody can estimate a neighbour's old hidden state.</li>
+</ul>
+</div>
+
+<h3>A crashed car process</h3>
+<p>Standard MPI aborts the whole job when a process dies, so we model a crash as a process that stays alive but goes silent (crash-stop). The road notices with a timeout, like a simple failure detector, and from then on the crashed car just rolls on at its current speed. In our demo car 4 crashes at 25 s and the leader brakes at 30 s:</p>
+<div class="table-wrap"><table>
+<tr><th>Car 4 crashes at 25 s, leader brakes at 30 s</th><th class="num">Fixed</th><th class="num">IA2C</th><th class="num">NeurComm</th></tr>
+<tr><td>Collision at</td><td class="num bad">37.0 s</td><td class="num bad">37.9 s</td><td class="num bad">37.2 s</td></tr>
+</table></div>
+<figure><img src="figures/shot_crash.png" alt="Simulator: crashed car 4 rolls into the car ahead">
+<figcaption>Car 4's process has crashed (grey &times;). It cannot brake when the leader does, so all three platoons collide. Detecting the failure is not enough; a real car would need its own safe fallback, like an emergency brake.</figcaption></figure>
+<p>One thing we ran into ourselves: on a busy laptop with a short timeout, a slow process can look like a crashed one. That is the classic false suspicion problem of timeout-based failure detectors. At the start of a run the IA2C cars were declared dead while still loading PyTorch, which we fixed with a startup barrier.</p>
+
+<!-- ===================================================================== -->
+<h2 id="training"><span class="step">Step 5</span>Training on MPI</h2>
+<p>Steps 3 and 4 run already trained policies on MPI. A fair question is whether the <i>learning</i> can be distributed too. So we wrote <code>mpi/train_mpi.py</code>: same 9 processes, but now every car process has <b>its own network, its own optimizer and its own memory of what happened</b>, and learns only from what it saw plus what its neighbours sent. The road runs the same train-then-test routine as the original trainer and saves the best checkpoint in the original format, so we score it with the original evaluator.</p>
+<ul>
+  <li><b>Each car alone:</b> the plain version.</li>
+  <li><b>Neighbours average:</b> after every update, neighbours swap their LSTM weights and average them (the consensus idea of Zhang et al. 2018).</li>
+</ul>
+<p>One detail needed real coordination. The original code limits the size of each update using the gradients of <b>all 8 networks together</b> (global gradient clipping). With 8 separate processes no one has all gradients, so each car shares the sizes of its gradients (10 numbers) with an <b>MPI Allgather</b>, every car computes the same total and scales its own update by the same factor.</p>
+
+<h3>Proof that it computes the same thing</h3>
+<p><code>mpi/check_train.py</code> gives the MPI trainer the same starting weights and the same random numbers as the original trainer (the road hands out the random numbers). Over 2,400 steps the test reward after every episode matched to 6 decimals, and the final weights differ by at most 0.00001. That difference starts at 0.00000003 (one rounding step of a 32-bit float, from adding numbers in a different order) and grows slowly with training length, so it is rounding, not a logic difference.</p>
+
+<h3>Results</h3>
+<div class="table-wrap"><table>
+<tr><th>Training</th><th class="num">12</th><th class="num">13</th><th class="num">14</th><th class="num">15</th><th class="num">16</th><th class="num">17</th><th class="num">Median</th><th class="num">Beat fixed</th></tr>
+<tr><td>Central (original code)</td><td class="num">&minus;37.2</td><td class="num">&minus;94.5</td><td class="num">&minus;374.6</td><td class="num">&minus;70.1</td><td class="num">&minus;431.9</td><td class="num">&minus;34.2</td><td class="num">&minus;82.3</td><td class="num">3/6</td></tr>
+<tr><td>MPI, each car alone</td><td class="num">&minus;387.8</td><td class="num">&minus;392.4</td><td class="num">&minus;165.5</td><td class="num">&minus;392.4</td><td class="num">&minus;374.7</td><td class="num">&minus;1099.8</td><td class="num">&minus;390.1</td><td class="num">0/6</td></tr>
+<tr><td>MPI, neighbours average</td><td class="num">&minus;373.5</td><td class="num">&minus;387.8</td><td class="num">&minus;392.4</td><td class="num">&minus;422.3</td><td class="num">&minus;1587.3</td><td class="num">&minus;393.7</td><td class="num">&minus;393.1</td><td class="num">0/6</td></tr>
+</table></div>
+<figure><img src="figures/training_curves.png" alt="Learning curves of central, MPI alone and MPI averaging">
+<figcaption>Learning curves over 6 seeds. Each car alone tracks central training for most of the run; averaging weights with neighbours clearly makes learning worse.</figcaption></figure>
+<p>Two honest observations:</p>
+<ul>
+  <li><b>Averaging weights hurt.</b> It also costs a lot: 1.87 GB of weights sent per 60k-step run. Our guess is that cars at different positions in the platoon need different behaviour (our trained IA2C cars each settle on a different setting), and averaging pushes them towards the same one.</li>
+  <li><b>Our MPI runs scored worse than central ones on these seeds,</b> even though the maths is the same. The figure below shows why we think this is mostly luck: when we gave the MPI trainer exactly the same start and random numbers, the two runs stayed identical for 56 episodes, then a rounding difference in the 8th decimal made them drift apart, and the final scores ended up at &minus;70.1 and &minus;392.4. On seed 17 the same experiment ended at exactly the same &minus;34.2. So a single run is close to a lottery ticket. Still, 3/6 vs 0/12 is a big gap, and we would want more seeds before claiming the two are equal in practice.</li>
+</ul>
+<figure><img src="figures/fig_chaos.png" alt="Two training runs that overlap for 56 episodes and then diverge">
+<figcaption>Same algorithm and same inputs, seed 15. Float rounding alone turns a good controller (&minus;70.1) into a bad one (&minus;392.4). This also explains why the paper's results are so hard to reproduce with a few seeds.</figcaption></figure>
+
+<!-- ===================================================================== -->
+<h2 id="byzantine"><span class="step">Step 6 &middot; our own idea</span>A car that lies</h2>
+<p>Everything in Step 4 is a <b>crash fault</b>: a node stops talking. The harder and more famous class in distributed systems is the <b>Byzantine fault</b>: a node keeps talking but sends wrong information. In a platoon this is also a real security worry, a hacked car sending fake V2V messages. Nothing like this is in the paper, so this is the part we designed ourselves.</p>
+
+<h3>The attack</h3>
+<p>From 25 s on, car 4 keeps driving normally but lies in everything it sends: either a fixed lie ("I am 10 m/s faster than I am") or random values (random speed, random observation and, for NeurComm, a random hidden state and a random last decision). At 30 s the leader brakes. The cars around car 4 believe it.</p>
+
+<h3>Defence 1: check messages against your own sensor</h3>
+<p>A car cannot measure its front car's speed directly, but its radar measures the gap, and if the gap is shrinking the front car must be slower. So each car compares the claimed speed with the speed its radar implies and <b>ignores the message if they differ by more than 2 m/s</b>, using the radar estimate instead. It is the same radar estimate as the fallback from Step 4, used now as a lie detector.</p>
+
+<h3>Defence 2: gossip around the liar</h3>
+<p>The check has a blind spot: only the car <b>behind</b> the liar can check it, because radar looks forward. Car 3, in front of car 4, still receives car 4's lies. And the normal one-hop path from car 5 to car 3 goes through the liar, who could just drop the warning. So:</p>
+<ul>
+  <li>After 3 rejected messages in a row, car 5 marks car 4 as a liar and <b>warns car 3 directly over a 2-hop link</b>, around the liar (real V2V radios reach further than one car).</li>
+  <li><b>Witness rule:</b> car 3 only believes an accusation about car 4 if it comes from car 5, the one car whose radar can actually check car 4. Otherwise a liar could get honest cars ignored just by accusing them.</li>
+  <li>From then on cars 3 and 5 ignore everything car 4 sends.</li>
+</ul>
+
+<figure><img src="figures/shot_liar.png" alt="Simulator: lying car 4 causes a crash in the fixed platoon">
+<figcaption>No defence, 38.9 s. Car 4 (purple) is lying. The fixed platoon has crashed at 38.5 s; IA2C and NeurComm are close to it.</figcaption></figure>
+<figure><img src="figures/shot_gossip.png" alt="Simulator: car 5 warns car 3 around the liar">
+<figcaption>Radar check + gossip, 30.9 s. The dashed purple arc is car 5 telling car 3 that car 4 lies; both now ignore car 4 (dashed outlines). The liar was exposed 0.2 s after it started lying.</figcaption></figure>
+
+<h3>Results on 10 roads</h3>
+<p>Car 4 lies from 25 s and the leader brakes at 30 s in every run, so even "nothing false" is a hard road (the brake alone costs a lot of reward).</p>
+<figure><img src="figures/byzantine_10seeds.png" alt="Bar chart of penalties under attacks, with and without the radar check">
+<figcaption>Malicious car on 10 roads. Left: no defence, the fixed controller crashes on every road with big lies, IA2C on 3/10 with random values. Right: radar check on, no crashes and the fixed and IA2C bars are back to their no-liar height.</figcaption></figure>
+<div class="table-wrap"><table>
+<tr><th>What car 4 sends</th><th class="num">Fixed</th><th class="num">IA2C</th><th class="num">NeurComm</th><th class="num">Lies caught by the check</th></tr>
+<tr><td>nothing false</td><td class="num">&minus;159.8</td><td class="num">&minus;166.1</td><td class="num">&minus;207.2</td><td class="num">0 false alarms in 30 runs</td></tr>
+<tr><td>+1.5 m/s</td><td class="num">&minus;161.9</td><td class="num">&minus;168.1</td><td class="num">&minus;212.3</td><td class="num">0% (under the 2 m/s limit)</td></tr>
+<tr><td>+5 m/s</td><td class="num">&minus;172.3</td><td class="num">&minus;178.5</td><td class="num">&minus;225.5</td><td class="num">100%</td></tr>
+<tr><td>+10 m/s</td><td class="num bad">10/10 crash</td><td class="num">&minus;221.2</td><td class="num">&minus;204.4</td><td class="num">100%</td></tr>
+<tr><td>random values</td><td class="num bad">10/10 crash</td><td class="num bad">3/10 crash</td><td class="num">&minus;204.1</td><td class="num">86%</td></tr>
+<tr class="hl"><td><b>any of these, radar check on</b></td><td class="num ok">0 crashes</td><td class="num ok">0 crashes</td><td class="num ok">0 crashes</td><td class="num"></td></tr>
+</table></div>
+<p>Gossip mostly matters for NeurComm, because its messages also go forward to car 3. On our demo road, with car 4 claiming +10 m/s, NeurComm scores &minus;197.8 with only the radar check and &minus;191.1 with gossip, which is back at its no-liar score (&minus;191.7). For fixed and IA2C the radar check alone was already enough.</p>
+<div class="box key">
+<b class="lead">What this means</b>
+<ul>
+  <li><b>One lying car can crash the whole platoon.</b></li>
+  <li><b>Trust, but verify with your own sensor.</b> Comparing messages with local measurements stopped every crash, with no false alarms.</li>
+  <li><b>It is a trade-off.</b> Lies smaller than the threshold get through, but they also barely hurt. A stricter threshold would catch more and raise more false alarms.</li>
+  <li><b>Spread suspicion around the faulty node, and only from a witness.</b> That is how the car that cannot check the liar still gets protected.</li>
+</ul>
+</div>
+<div class="box warn">
+<b class="lead">Limits we know about</b>
+<ul>
+  <li>Gossip costs bandwidth: one small message per car per step (fixed goes from 80 to 140 messages per second). Sending only when there is news would be cheaper but makes runs harder to reproduce exactly.</li>
+  <li>The liar is itself the witness for car 3, so it <i>could</i> falsely accuse car 3. Stopping that needs more witnesses or signed messages.</li>
+  <li>NeurComm never crashed from lies, even without a defence, although it suffers most from late messages. We do not fully understand why yet.</li>
+</ul>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="learned"><span class="step">Wrap-up</span>What we learned</h2>
+<h3>About distributed systems</h3>
+<ul>
+  <li>A learned multi-agent controller can be split into real processes that only exchange messages, without changing a single number of its behaviour. Checking this step by step (<code>check_mpi.py</code>, <code>check_train.py</code>) saved us more than once.</li>
+  <li>In this system communication is a safety feature: without it the platoon crashes in 11 s.</li>
+  <li><b>Late is worse than lost</b>, and the best fallback for missing or old data is the node's own local sensing.</li>
+  <li>Crash faults need a detector (timeouts, with their false suspicion problem) and a safe local action; detection alone does not prevent the crash.</li>
+  <li>Byzantine faults are harder, but in a physical system local sensors give a way to check what others claim. Gossip with a witness rule spreads that knowledge around the faulty node.</li>
+  <li>Even a tiny collective (an Allgather of 10 numbers) can be what keeps distributed training equal to central training.</li>
+</ul>
+<h3>About RL</h3>
+<ul>
+  <li>Multi-agent RL results are very seed-sensitive. Rounding differences alone can turn a good run into a bad one, so few-seed comparisons (including ours) should be read carefully.</li>
+  <li>More communication is not automatically better: NeurComm sends 13&times; more data than IA2C, scored worse in our runs and is more fragile to delays.</li>
+  <li>Learned controllers are great at the situation they were trained on (IA2C's catch-up is almost perfect) and weaker on surprises like a braking leader, where the simple fixed controller kept the biggest safety gap.</li>
+</ul>
+
+<h2 id="next"><span class="step">Next</span>What is left and future work</h2>
+<ul>
+  <li><b>Two laptops.</b> Everything is ready to run the same program across two machines over Wi-Fi (road and cars 1 to 4 on one laptop, cars 5 to 8 on the other), so cars 4 and 5 talk over a real network. We will do this before the final demo.</li>
+  <li><b>Event-triggered messages:</b> send only when something changed enough, with a heartbeat so silence can still be told apart from a crash. Interesting mainly for NeurComm's large messages.</li>
+  <li><b>Stronger Byzantine defence:</b> several witnesses or signed messages, so a liar cannot frame its neighbour.</li>
+  <li><b>Training with faults:</b> train NeurComm with dropped and delayed messages so it learns not to over-trust them.</li>
+  <li><b>Asynchronous steps:</b> right now all processes move in lockstep each 0.1 s; real cars would not.</li>
+</ul>
+
+<h2 id="run"><span class="step">Appendix</span>How to run everything</h2>
+<pre>python3 -m venv .venv &amp;&amp; .venv/bin/pip install -r demo/requirements.txt mpi4py
+brew install open-mpi
+
+# 9 processes: the road + 8 cars (controllers: radar, fixed, ia2c, neurcomm)
+mpirun --oversubscribe -np 9 .venv/bin/python mpi/platoon_mpi.py --controller neurcomm
+mpirun --oversubscribe -np 9 .venv/bin/python mpi/platoon_mpi.py --controller fixed --delay 5 --fallback radar
+mpirun --oversubscribe -np 9 .venv/bin/python mpi/platoon_mpi.py --controller fixed --brake-at 30 \
+       --byzantine-car 4 --byzantine-at 25 --attack noise --defense --gossip
+
+.venv/bin/python mpi/check_mpi.py                 # MPI = Python at every step
+.venv/bin/python mpi/check_train.py               # MPI training = original training
+.venv/bin/python mpi/experiments.py --test-seeds 10   # loss and delay sweeps
+.venv/bin/python mpi/experiments.py --byzantine 10    # malicious car sweep
+
+# the demo page with all 9 sections
+.venv/bin/python mpi/make_demo_sections.py
+.venv/bin/python -m simulator.server --port 8767 --open --sections mpi/demo_sections.json</pre>
+
+<h3>References</h3>
+<ol class="small">
+  <li>T. Chu, S. Chinchali, S. Katti. Multi-agent Reinforcement Learning for Networked System Control. ICLR 2020. Code: github.com/cts198859/deeprl_network.</li>
+  <li>K. Zhang, Z. Yang, H. Liu, T. Zhang, T. Basar. Fully Decentralized Multi-Agent Reinforcement Learning with Networked Agents. ICML 2018.</li>
+  <li>J. Gilmer, S. Schoenholz, P. Riley, O. Vinyals, G. Dahl. Neural Message Passing for Quantum Chemistry. ICML 2017.</li>
+  <li>M. Bando, K. Hasebe, A. Nakayama, A. Shibata, Y. Sugiyama. Dynamical model of traffic congestion and numerical simulation. Physical Review E, 1995 (optimal velocity model).</li>
+  <li>Message Passing Interface Forum. MPI: A Message-Passing Interface Standard, Version 4.0. 2021.</li>
+  <li>L. Dalcin, Y.-L. L. Fang. mpi4py: Status Update After 12 Years of Development. Computing in Science &amp; Engineering, 2021.</li>
+  <li>T. D. Chandra, S. Toueg. Unreliable Failure Detectors for Reliable Distributed Systems. Journal of the ACM, 1996.</li>
+  <li>L. Lamport, R. Shostak, M. Pease. The Byzantine Generals Problem. ACM TOPLAS, 1982.</li>
+</ol>
+
+</main>
+</body>
+</html>

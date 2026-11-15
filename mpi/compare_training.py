@@ -1,6 +1,6 @@
 """
 Central training vs distributed training on MPI (IA2C, catch-up, 60k steps).
-Central: seeds 12-14. MPI (each car alone / neighbours average): seeds 12-17.
+Central and MPI (each car alone / neighbours average): seeds 12-17.
 
     python mpi/compare_training.py
 
@@ -25,9 +25,9 @@ from experiments import OUT, plt, style, write_csv  # noqa: E402
 
 SEEDS = (12, 13, 14, 15, 16, 17)
 EVAL_SEEDS = ','.join(str(s) for s in range(100000, 100500, 10))
-CENTRAL = ['demo/runs/ia2c_catchup', 'demo/repro/seed13/ia2c_catchup', 'demo/repro/seed14/ia2c_catchup']
+CENTRAL = ['demo/runs/ia2c_catchup'] + ['demo/repro/seed%d/ia2c_catchup' % s for s in (13, 14, 15, 16, 17)]
 METHODS = [  # (label, colour or None = table only, {seed: run folder})
-    ('Central (original code)', '#52514e', dict(zip((12, 13, 14), CENTRAL))),
+    ('Central (original code)', '#52514e', dict(zip(SEEDS, CENTRAL))),
     ('MPI, each car alone', '#2a78d6', {s: 'mpi/train/independent_s%d' % s for s in SEEDS}),
     ('MPI, neighbours average', '#eb6834', {s: 'mpi/train/consensus_s%d' % s for s in SEEDS}),
     ('MPI, alone, local clipping', None, {s: 'mpi/train/localclip/independent_s%d' % s for s in (12, 13, 14)}),
@@ -90,8 +90,9 @@ def main():
     for r in rows:
         print({k: (float(x) if isinstance(x, np.floating) else x) for k, x in r.items()})
 
-    # learning curves: rolling mean of the last 5 test episodes (what picks the best checkpoint)
-    grid = np.linspace(3000, 60000, 120)
+    # learning curves: test reward smoothed over 15 episodes; median over seeds (one disastrous
+    # seed would drag a mean far down), band = the middle seeds (2nd best to 2nd worst)
+    grid = np.linspace(5000, 60000, 111)
     fig, ax = plt.subplots(figsize=(7.5, 4))
     for label, colour, dirs in METHODS:
         if colour is None:
@@ -99,16 +100,16 @@ def main():
         ys = []
         for d in dirs.values():
             x, y = curve(d)
-            y = pd.Series(y).rolling(5, min_periods=1).mean().values
+            y = pd.Series(y).rolling(15, min_periods=1).mean().values
             ys.append(np.interp(grid, x, y))
-        ys = np.array(ys)
-        ax.plot(grid / 1000, ys.mean(0), color=colour, lw=2, label=label)
-        ax.fill_between(grid / 1000, ys.min(0), ys.max(0), color=colour, alpha=0.12, lw=0)
-    ax.axhline(FIXED_BASELINE, color='#a3a8ae', ls='--', lw=1.2, label='Fixed controller')
-    ax.set_ylim(-700, 0)
-    style(ax, 'training steps (thousands)', 'test reward (rolling mean of 5)',
-          'Learning curves (line = mean over seeds, band = best to worst seed)')
-    ax.legend(frameon=False, fontsize=9, loc='lower right')
+        ys = np.sort(np.array(ys), axis=0)
+        ax.plot(grid / 1000, np.median(ys, 0), color=colour, lw=2, label=label)
+        ax.fill_between(grid / 1000, ys[1], ys[-2], color=colour, alpha=0.12, lw=0)
+    ax.axhline(FIXED_BASELINE, color='#a3a8ae', ls='--', lw=1.2, label='Fixed controller (test score)')
+    ax.set_ylim(-900, 0)
+    style(ax, 'training steps (thousands)', 'test reward (mean of last 15 episodes)',
+          'Learning curves, 6 seeds each (line = median, band = middle seeds)')
+    ax.legend(frameon=False, fontsize=9, loc='lower left')
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, 'training_curves.png'), dpi=160)
     print('wrote', os.path.join(OUT, 'training_curves.png'))

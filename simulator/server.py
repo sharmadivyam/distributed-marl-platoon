@@ -246,6 +246,8 @@ class Replay:
                 self.hub.publish('config', self.config())
             elif cmd == 'speed':
                 self.speed = min(8.0, max(0.25, float(msg.get('value', 1.0))))
+            elif cmd == 'seek':       # jump to a time [s] (used to take screenshots)
+                self.i = min(self.n_ticks - 1, max(0, int(round(float(msg.get('value', 0)) / self.dt))))
             elif cmd == 'section':
                 k = int(msg.get('value', 0))
                 if not 0 <= k < len(self.sections):
