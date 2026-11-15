@@ -7,7 +7,11 @@ TMP="$(mktemp -d)/platoon"
 mkdir -p "$TMP"
 rsync -a --exclude '.venv' --exclude '.git' --exclude 'demo/repro' --exclude 'demo/runs_*' \
       --exclude 'demo/videos' --exclude 'demo/presentation*' --exclude 'demo/results*' \
-      --exclude 'mpi/logs' --exclude 'mpi/results' --exclude 'envs/*_data' --exclude '__pycache__' \
+      --exclude 'mpi/logs' --exclude 'mpi/results' --exclude 'mpi/train' --exclude 'demo/final_report' --exclude 'envs/*_data' --exclude '__pycache__' \
       "$REPO/" "$TMP/"
+# the NeurComm model the MPI program uses (demo/repro itself is excluded: it is large)
+NC=demo/repro/nc_alpha0.9_seed13/ma2c_nc_catchup
+mkdir -p "$TMP/$NC/data" "$TMP/$NC/model/best"
+cp "$REPO/$NC"/data/*.ini "$TMP/$NC/data/" && cp "$REPO/$NC"/model/best/*.pt "$TMP/$NC/model/best/"
 (cd "$(dirname "$TMP")" && rm -f ~/Downloads/platoon_bundle.zip && zip -qr ~/Downloads/platoon_bundle.zip platoon)
 echo "Bundle: ~/Downloads/platoon_bundle.zip ($(du -h ~/Downloads/platoon_bundle.zip | cut -f1)). AirDrop it to laptop B."
